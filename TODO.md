@@ -11,7 +11,7 @@
 | 2 | **State Stores** | 🟢 Completed | (cherry-picked) | appStore + settingsStore on dev |
 | 3 | **API & Services** | 🔴 Not started | — | KernelApiClient, SseStreamer, Voice, SQLite |
 | 4 | **Shared Components** | 🔴 Not started | — | 14 reusable UI components |
-| 5 | **Screens & Navigation** | 🟢 Completed | (cherry-picked) | Welcome + Onboarding on dev, MainTabs placeholder |
+| 5 | **Screens & Navigation** | 🟡 In progress | (cherry-picked) | Welcome + Onboarding on dev, full MainTabs + remaining screens pending |
 | 6 | **CI/CD Pipeline** | 🔴 Not started | — | GHA workflow + self-hosted runner |
 
 ## Legend
