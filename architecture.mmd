@@ -1,0 +1,79 @@
+graph TD
+  subgraph Phone["📱 User's Phone"]
+    subgraph App["kernel-mobile-v2 React Native (Expo SDK 52+)"]
+      subgraph Screens["Screens (React Navigation)"]
+        Welcome["WelcomeScreen"]
+        Onboarding["OnboardingScreen"]
+        BotList["BotListScreen"]
+        Chat["ChatScreen"]
+        Settings["SettingsScreen"]
+        BotProfile["BotProfileScreen"]
+      end
+
+      subgraph State["State (Zustand Stores)"]
+        ChatStore["chatStore messages, stream"]
+        AgentStore["agentStore peers, discovery"]
+        SettingsStore["settingsStore config, mode"]
+        AppStore["appStore onboarding status"]
+      end
+
+      subgraph Services["Services"]
+        KernelApi["KernelApiClient axios"]
+        SseStreamer["SseStreamer EventSource"]
+        VoiceService["VoiceService expo-audio"]
+        Sqlite["SqlitePersistence expo-sqlite"]
+      end
+
+      subgraph Components["Shared Components"]
+        MessageBubble["MessageBubble"]
+        StreamingBubble["StreamingBubble"]
+        ComposerBar["ComposerBar"]
+        InlineButtons["InlineButtons"]
+        VoiceRecorder["VoiceRecorder"]
+        MarkdownRenderer["MarkdownRenderer"]
+      end
+    end
+  end
+
+  subgraph Machine["💻 User's Machine (same LAN)"]
+    KernelEvolving["kernel-evolving FastAPI :8779"]
+  end
+
+  subgraph CI["CI/CD"]
+    GHA["GitHub Actions Self-Hosted Runner"]
+    Gradle["Gradle assembleRelease"]
+    APK["kernel-mobile-v2-*.apk"]
+    Release["GitHub Release"]
+  end
+
+  Welcome --> Onboarding
+  Onboarding --> BotList
+  BotList --> Chat
+  BotList --> Settings
+  Chat --> BotProfile
+
+  ChatStore --> MessageBubble
+  ChatStore --> StreamingBubble
+  AgentStore --> BotList
+  SettingsStore --> Settings
+  AppStore --> Welcome
+  AppStore --> Onboarding
+
+  KernelApi --> KernelEvolving
+  SseStreamer --> KernelEvolving
+  VoiceService --> KernelEvolving
+
+  KernelApi --> ChatStore
+  SseStreamer --> ChatStore
+  VoiceService --> Sqlite
+  Sqlite --> ChatStore
+
+  ComposerBar --> ChatStore
+  InlineButtons --> ChatStore
+  VoiceRecorder --> VoiceService
+
+  GHA --> Gradle
+  Gradle --> APK
+  APK --> Release
+
+  App -. "Build & Deploy via" .-> CI
