@@ -221,6 +221,173 @@ User types message
 - kernel-central proxy integration (v3)
 - Evolution dashboard (kernel-desktop)
 
+## CI/CD Pipeline (GitHub Actions + EAS Build)
+
+### Trigger
+On every `v*` tag push to GitHub:
+
+```yaml
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+      - run: npx expo-doctor  # check for Expo config issues
+      - run: npx tsc --noEmit  # TypeScript type-check
+      - run: npx jest --ci  # Run unit + integration tests
+
+  build-android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+      - name: Build APK via EAS
+        run: npx eas build --platform android --profile production --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Download APK from EAS
+        run: |
+          BUILD_ID=$(npx eas build:list --platform android --status finished --json --limit 1 | jq -r '.[0].id')
+          npx eas build:download $BUILD_ID --output kernel-mobile-v2.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: kernel-mobile-v2.apk
+
+  build-ios:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+      - name: Build IPA via EAS
+        run: npx eas build --platform ios --profile production --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Download IPA from EAS
+        run: |
+          BUILD_ID=$(npx eas build:list --platform ios --status finished --json --limit 1 | jq -r '.[0].id')
+          npx eas build:download $BUILD_ID --output kernel-mobile-v2.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: kernel-mobile-v2.ipa
+
+  release:
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Create GitHub Release
+        run: |
+          gh release create ${{ github.ref_name }} \
+            kernel-mobile-v2.apk \
+            kernel-mobile-v2.ipa \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Required Secrets
+
+| Secret | Source | Purpose |
+|---|---|---|
+| `EXPO_TOKEN` | Expo dashboard → Account → Access Tokens | Authenticates EAS Build from CI |
+| `GITHUB_TOKEN` | Automatic (provided by GitHub Actions) | Creates GitHub Release |
+
+### EAS Build Profiles (`eas.json`)
+
+```json
+{
+  "build": {
+    "production": {
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      },
+      "ios": {
+        "autoIncrement": true
+      },
+      "env": {
+        "APP_VARIANT": "production"
+      }
+    },
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
+```
+
+### Versioning
+
+- Version numbers come from `app.json` (`expo.version`)
+- Tag format: `v<major>.<minor>.<patch>` (e.g., `v1.0.0`)
+- Tag triggers: automatic APK + IPA build + GitHub Release
+- No manual build steps — push tag, CI handles the rest
+
+### Test gate
+
+All builds are gated on:
+1. **`npx expo-doctor`** — validates Expo config, dependencies, native module compatibility
+2. **`npx tsc --noEmit`** — TypeScript type-check (strict mode)
+3. **`npx jest --ci`** — unit + integration tests (minimum 80% coverage on core services)
+
+If any gate fails, the build is cancelled before EAS is invoked. No wasted build credits on broken code.
+
+### Release artifact naming
+
+| Platform | Artifact | Format |
+|---|---|---|
+| Android | `kernel-mobile-v2-<version>.apk` | Signed APK (EAS Build) |
+| iOS | `kernel-mobile-v2-<version>.ipa` | Signed IPA (EAS Build) |
+
+### Difference from v1 CI
+
+| Aspect | v1 (NativePHP) | v2 (React Native + EAS) |
+|---|---|---|
+| Build server | GitHub Actions runner (self-setup JDK/Android SDK) | EAS Build cloud (managed) |
+| Build command | `./gradlew assembleDebug` (after Laravel bundle) | `eas build --platform android` |
+| WSL workarounds | Required for Gradle + composer | None — EAS runs on macOS/Linux native |
+| APK signing | Debug-only (no keystore) | Production signed via EAS credentials |
+| Test gate | Pest tests (PHP) | Jest tests (TypeScript) |
+| Build duration | ~20-30 min (full Laravel + Gradle) | ~5-10 min (npm + EAS Build) |
+
 ## Status
 
 **2026-07-29** — ADR written, repository scaffolded. Next: Expo project init, install dependencies, build WelcomeScreen.
