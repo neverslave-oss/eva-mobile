@@ -25,10 +25,10 @@ React Native v2 eliminates this by using React Navigation (native stack navigato
 | SSE via Livewire `$this->stream()` | EventSource / fetch streaming |
 | SQLite via Eloquent | expo-sqlite / AsyncStorage |
 | Laravel Artisan + composer | npm / npx expo |
-| NativePHP Mobile build | EAS Build (Android + iOS) |
+| NativePHP Mobile build | Self-hosted GitHub Actions runner (Gradle) |
 | PHP 8.4 WebView sandbox | Hermes engine (JS) |
-| Gradle via WSL hacks | EAS Build cloud CI |
-| Force-push/tag release 100x | Standard Expo EAS pipeline |
+| Gradle via WSL hacks | Self-hosted runner (no WSL, direct Gradle) |
+| Force-push/tag release 100x | Standard GitHub Actions pipeline |
 
 ## Chosen platforms
 
@@ -37,7 +37,7 @@ React Native v2 eliminates this by using React Navigation (native stack navigato
 - **State:** Zustand — lightweight, TypeScript-native, persistent via AsyncStorage
 - **Streaming:** EventSource polyfill or expo's fetch streaming API
 - **Local storage:** expo-sqlite for conversation history + AppSettings
-- **Build:** EAS Build (Android APK + iOS IPA via cloud CI)
+- **Build:** Self-hosted GitHub Actions runner (Gradle APK — no EAS, no Expo tokens)
 - **Agent backend:** kernel-evolving (FastAPI, port 8779, LAN)
 - **Proxy hub (optional):** kernel-central.neverslave.com (future)
 - **HTTP client:** axios + fetch (raw) for SSE streaming
@@ -165,7 +165,7 @@ User types message
 | Settings persistence | expo-sqlite — AppSettings table |
 | Streaming replies (SSE) | EventSource polyfill → Zustand stream buffer |
 | SQLite conversation history | expo-sqlite — conversations + messages tables |
-| CI/CD (GitHub Actions) | EAS Build on tag push |
+| CI/CD (GitHub Actions) | Self-hosted runner → Gradle APK |
 
 ## Key decisions
 
@@ -176,8 +176,8 @@ User types message
 | State | Livewire component state | Zustand stores | Decoupled, testable, persistent. No page-reload state loss. |
 | Navigation | Livewire `$this->redirect()` | React Navigation | Native stack = no 404s, no redirect loops, no asset_url hacks. |
 | Streaming | `$this->stream()` via Livewire | EventSource → Zustand | Direct SSE handling, no Livewire middleware. |
-| Build | NativePHP → Gradle (WSL hack) | EAS Build (cloud) | Works on real CI, not workarounds for WSL limitations. |
-| Release cadence | 100+ tags, unverified | Standard EAS pipeline | Test before build, not build-then-pray. |
+| Build | NativePHP → Gradle (WSL hack) | GitHub Actions runner (self-hosted, direct Gradle) | Same runner as v1. No EAS, no Expo tokens, no cloud build credits. |
+| Release cadence | 100+ tags, unverified | Tag → CI → artifact | Push `v*` tag, runner builds and releases. No third-party dependency. |
 
 ## What changes from v1
 
@@ -186,7 +186,7 @@ User types message
 - **No composer** — `npm install` only.
 - **No WebView** — native navigation, no Livewire/routing conflicts.
 - **No NativePHP** — no desktop/mobile package conflicts.
-- **No Gradle hacks** — EAS Build handles Android SDK setup.
+- **No Gradle hacks** — self-hosted runner handles Android SDK natively (no WSL).
 
 ## What stays the same
 
@@ -221,7 +221,9 @@ User types message
 - kernel-central proxy integration (v3)
 - Evolution dashboard (kernel-desktop)
 
-## CI/CD Pipeline (GitHub Actions + EAS Build)
+## CI/CD Pipeline (Self-Hosted GitHub Actions Runner)
+
+Same pattern as v1: a self-hosted GitHub Actions runner builds the APK directly via Gradle. No EAS Build, no Expo tokens, no third-party cloud build service.
 
 ### Trigger
 On every `v*` tag push to GitHub:
@@ -234,69 +236,54 @@ on:
     tags:
       - 'v*'
 
+env:
+  NODE_VERSION: '22'
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
       - run: npm ci
-      - run: npx expo-doctor  # check for Expo config issues
-      - run: npx tsc --noEmit  # TypeScript type-check
-      - run: npx jest --ci  # Run unit + integration tests
+      - run: npx expo-doctor
+      - run: npx tsc --noEmit
+      - run: npx jest --ci
 
   build-android:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
       - run: npm ci
-      - name: Build APK via EAS
-        run: npx eas build --platform android --profile production --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      - name: Download APK from EAS
+      - name: Build APK (Gradle)
         run: |
-          BUILD_ID=$(npx eas build:list --platform android --status finished --json --limit 1 | jq -r '.[0].id')
-          npx eas build:download $BUILD_ID --output kernel-mobile-v2.apk
+          cd android
+          ./gradlew assembleRelease --no-daemon
+      - name: Rename APK
+        run: |
+          VERSION=$(node -p "require('./app.json').expo.version")
+          mv android/app/build/outputs/apk/release/app-release.apk \
+            kernel-mobile-v2-$VERSION.apk
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: kernel-mobile-v2.apk
-
-  build-ios:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'npm'
-      - run: npm ci
-      - name: Build IPA via EAS
-        run: npx eas build --platform ios --profile production --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      - name: Download IPA from EAS
-        run: |
-          BUILD_ID=$(npx eas build:list --platform ios --status finished --json --limit 1 | jq -r '.[0].id')
-          npx eas build:download $BUILD_ID --output kernel-mobile-v2.ipa
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ios-ipa
-          path: kernel-mobile-v2.ipa
+          path: kernel-mobile-v2-*.apk
 
   release:
-    needs: [build-android, build-ios]
-    runs-on: ubuntu-latest
+    needs: [build-android]
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
       actions: read
@@ -308,8 +295,7 @@ jobs:
       - name: Create GitHub Release
         run: |
           gh release create ${{ github.ref_name }} \
-            kernel-mobile-v2.apk \
-            kernel-mobile-v2.ipa \
+            kernel-mobile-v2-*.apk \
             --title "${{ github.ref_name }}" \
             --generate-notes
         env:
@@ -320,73 +306,74 @@ jobs:
 
 | Secret | Source | Purpose |
 |---|---|---|
-| `EXPO_TOKEN` | Expo dashboard → Account → Access Tokens | Authenticates EAS Build from CI |
 | `GITHUB_TOKEN` | Automatic (provided by GitHub Actions) | Creates GitHub Release |
 
-### EAS Build Profiles (`eas.json`)
+No Expo tokens. No EAS credentials. Nothing leaves GitHub's ecosystem.
 
-```json
-{
-  "build": {
-    "production": {
-      "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
-      },
-      "ios": {
-        "autoIncrement": true
-      },
-      "env": {
-        "APP_VARIANT": "production"
-      }
-    },
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      }
-    }
-  },
-  "submit": {
-    "production": {}
-  }
-}
+### Prerequisites (self-hosted runner)
+
+The runner machine must have:
+- Node.js 22
+- JDK 17 (Temurin recommended)
+- Android SDK (command-line tools + platform `android-35` + build-tools `35.0.0`)
+- Gradle (wrapper included in repo)
+- `ANDROID_HOME` environment variable set
+
+Install once on the runner:
+```bash
+# Install Android SDK command-line tools
+mkdir -p $HOME/android-sdk/cmdline-tools
+cd $HOME/android-sdk/cmdline-tools
+curl -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+unzip cmdline-tools.zip
+mv cmdline-tools latest
+
+# Accept licenses + install platform
+$HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+$HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+  "platforms;android-35" \
+  "build-tools;35.0.0"
+
+echo 'export ANDROID_HOME=$HOME/android-sdk' >> ~/.bashrc
+echo 'export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools' >> ~/.bashrc
 ```
 
 ### Versioning
 
 - Version numbers come from `app.json` (`expo.version`)
 - Tag format: `v<major>.<minor>.<patch>` (e.g., `v1.0.0`)
-- Tag triggers: automatic APK + IPA build + GitHub Release
+- Tag triggers: automatic APK build + GitHub Release on self-hosted runner
 - No manual build steps — push tag, CI handles the rest
+- No EAS, no Expo cloud involvement at any point
 
 ### Test gate
 
 All builds are gated on:
 1. **`npx expo-doctor`** — validates Expo config, dependencies, native module compatibility
 2. **`npx tsc --noEmit`** — TypeScript type-check (strict mode)
-3. **`npx jest --ci`** — unit + integration tests (minimum 80% coverage on core services)
+3. **`npx jest --ci`** — unit + integration tests
 
-If any gate fails, the build is cancelled before EAS is invoked. No wasted build credits on broken code.
+If any gate fails, the build is cancelled before Gradle is invoked. No wasted runner time on broken code.
 
 ### Release artifact naming
 
 | Platform | Artifact | Format |
 |---|---|---|
-| Android | `kernel-mobile-v2-<version>.apk` | Signed APK (EAS Build) |
-| iOS | `kernel-mobile-v2-<version>.ipa` | Signed IPA (EAS Build) |
+| Android | `kernel-mobile-v2-<version>.apk` | Signed release APK (Gradle) |
+
+(iOS build is out of scope for the self-hosted runner — macOS build agent needed)
 
 ### Difference from v1 CI
 
-| Aspect | v1 (NativePHP) | v2 (React Native + EAS) |
+| Aspect | v1 (NativePHP) | v2 (React Native + Self-Hosted Runner) |
 |---|---|---|
-| Build server | GitHub Actions runner (self-setup JDK/Android SDK) | EAS Build cloud (managed) |
-| Build command | `./gradlew assembleDebug` (after Laravel bundle) | `eas build --platform android` |
-| WSL workarounds | Required for Gradle + composer | None — EAS runs on macOS/Linux native |
-| APK signing | Debug-only (no keystore) | Production signed via EAS credentials |
-| Test gate | Pest tests (PHP) | Jest tests (TypeScript) |
-| Build duration | ~20-30 min (full Laravel + Gradle) | ~5-10 min (npm + EAS Build) |
+| Build server | GitHub Actions runner (self-setup JDK/Android SDK) | Same self-hosted runner |
+| Build command | `./gradlew assembleDebug` (after Laravel bundle) | `./gradlew assembleRelease` (no bundle step) |
+| WSL workarounds | Required (Windows runner + WSL for Gradle) | None — runner is Linux native |
+| APK signing | Debug-only (no keystore) | Release-signed via keystore on runner |
+| Test gate | Pest tests (PHP) | Jest / tsc tests (TypeScript) |
+| Build duration | ~20-30 min (full Laravel + Gradle) | ~5-10 min (npm install + Gradle) |
+| Cloud dependency | None (self-built) | None (same — no EAS) |
 
 ## Status
 
