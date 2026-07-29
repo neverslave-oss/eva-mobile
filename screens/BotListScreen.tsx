@@ -9,10 +9,9 @@ import {
   StatusBar,
   RefreshControl,
 } from 'react-native';
-import { SCREEN_NAMES, Agent, MainTabParamList } from '../types';
+import { SCREEN_NAMES, Agent, RootStackParamList } from '../types';
 import { useAgentStore } from '../stores/agentStore';
-import { useNavigation } from '@react-navigation/native';
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, typography, borderRadius, spacing } from '../theme';
 import Svg, { Path, Ellipse, Circle } from 'react-native-svg';
 
@@ -50,7 +49,7 @@ const SnakeEMini = ({ size = 24 }: { size?: number }) => (
 );
 
 export default function BotListScreen() {
-  const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { agents, selectedAgentId, selectAgent } = useAgentStore();
   const [refreshing, setRefreshing] = React.useState(false);
 

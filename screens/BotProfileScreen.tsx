@@ -10,7 +10,8 @@ import {
   FlatList,
 } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
-import { SCREEN_NAMES, MainTabParamList } from '../types';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { SCREEN_NAMES, RootStackParamList } from '../types';
 import { useAgentStore } from '../stores/agentStore';
 import { colors, typography, borderRadius, spacing } from '../theme';
 import Svg, { Path, Ellipse, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -61,7 +62,7 @@ const MOCK_LINKS = [
 ];
 
 export default function BotProfileScreen() {
-  const route = useRoute<RouteProp<MainTabParamList, 'BotProfile'>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'BotProfile'>>();
   const navigation = useNavigation<any>();
   const { agentId } = route.params;
   const agent = useAgentStore((s) => s.agents.find((a) => a.id === agentId));

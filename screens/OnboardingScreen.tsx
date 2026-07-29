@@ -68,7 +68,7 @@ export default function OnboardingScreen({ navigation }: OnboardingScreenProps) 
     setMode(mode);
     setServerUrl(localUrl);
     setOnboardingCompleted(true);
-    navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.MainTabs }] });
+    navigation.reset({ index: 0, routes: [{ name: SCREEN_NAMES.BotList }] });
   };
 
   const stepDot = (idx: number) => (
