@@ -10,8 +10,8 @@
 | 1 | **Project Scaffold** | 🟢 Completed | `feature/initial-scaffold` | Expo init, deps, TS strict, folder skeleton |
 | 2 | **State Stores** | 🟢 Completed | (cherry-picked) | appStore + settingsStore on dev |
 | 3 | **API & Services** | 🟢 Completed | `feature/api-services` | KernelApiClient, SseStreamer, SqlitePersistence, VoiceService |
-| 4 | **Shared Components** | 🔴 Not started | — | 14 reusable UI components |
-| 5 | **Screens & Navigation** | 🟡 In progress | (cherry-picked) | Welcome + Onboarding on dev, full MainTabs + remaining screens pending |
+| 4 | **Shared Components** | 🟢 Completed | `feature/shared-components` | 14 UI components: MessageBubble, ComposerBar, Toast, etc. |
+| 5 | **Screens & Navigation** | 🟡 In progress | `feature/screens-navigation` | Welcome + Onboarding on dev. Building BotList, Chat, Settings, BotProfile + MainTabs |
 | 6 | **CI/CD Pipeline** | 🔴 Not started | — | GHA workflow + self-hosted runner |
 
 ## Legend
