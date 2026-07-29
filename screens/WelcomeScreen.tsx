@@ -11,48 +11,75 @@ import Svg, {
   Defs,
   LinearGradient,
   Stop,
-  Rect,
   Circle,
+  Path,
+  Ellipse,
 } from 'react-native-svg';
 import { SCREEN_NAMES } from '../types';
+import { colors, typography, borderRadius } from '../theme';
 
 interface WelcomeScreenProps {
   navigation: any;
 }
 
-const EIcon = () => (
-  <Svg width="120" height="120" viewBox="0 0 120 120" fill="none">
+// Full snake-E logo matching v1's welcome screen
+const SnakeELogo = () => (
+  <Svg width="140" height="140" viewBox="0 0 200 200" fill="none">
     <Defs>
-      <LinearGradient id="eGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <LinearGradient id="wlcmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
         <Stop offset="0%" stopColor="#58a6ff" />
         <Stop offset="50%" stopColor="#3fb950" />
         <Stop offset="100%" stopColor="#bc8cff" />
       </LinearGradient>
+      <LinearGradient id="wlcmEye" x1="0%" y1="0%" x2="100%" y2="100%">
+        <Stop offset="0%" stopColor="#ff6e40" />
+        <Stop offset="100%" stopColor="#ff1744" />
+      </LinearGradient>
     </Defs>
     {/* Background ring */}
-    <Circle cx="60" cy="60" r="56" stroke="url(#eGrad)" strokeWidth="3" opacity="0.3" />
-    {/* Vertical bar */}
-    <Rect x="28" y="28" width="8" height="64" rx="4" fill="url(#eGrad)" />
-    {/* Top bar */}
-    <Rect x="36" y="28" width="52" height="8" rx="4" fill="url(#eGrad)" />
-    {/* Middle bar */}
-    <Rect x="36" y="56" width="40" height="8" rx="4" fill="url(#eGrad)" />
-    {/* Bottom bar */}
-    <Rect x="36" y="84" width="52" height="8" rx="4" fill="url(#eGrad)" />
+    <Circle cx="100" cy="100" r="95" fill="#0d1117" opacity="0.3" />
+    {/* Body */}
+    <Path d="M60 28 C60 45,62 60,62 75 C62 90,62 105,62 120 C62 135,62 150,60 165 C58 178,60 188,75 192"
+          stroke="url(#wlcmGrad)" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round"/>
+    <Path d="M62 48 C80 42,95 40,115 42 C130 44,142 48,148 52"
+          stroke="url(#wlcmGrad)" strokeWidth="11" strokeLinecap="round"/>
+    <Path d="M148 52 C150 58,145 64,138 65"
+          stroke="url(#wlcmGrad)" strokeWidth="9" strokeLinecap="round"/>
+    <Path d="M62 95 C80 90,98 88,118 90 C132 92,142 96,146 100"
+          stroke="url(#wlcmGrad)" strokeWidth="11" strokeLinecap="round"/>
+    <Path d="M146 100 C148 104,143 110,137 110"
+          stroke="url(#wlcmGrad)" strokeWidth="9" strokeLinecap="round"/>
+    <Path d="M60 142 C78 140,96 142,116 145 C130 148,140 152,146 156"
+          stroke="url(#wlcmGrad)" strokeWidth="11" strokeLinecap="round"/>
+    <Path d="M146 156 C148 162,142 168,135 168"
+          stroke="url(#wlcmGrad)" strokeWidth="9" strokeLinecap="round"/>
+    <Path d="M75 192 C85 196,98 196,105 190 C112 184,110 175,102 173 C96 172,92 176,93 180"
+          stroke="url(#wlcmGrad)" strokeWidth="9" strokeLinecap="round"/>
+    <Path d="M93 180 C94 183,97 183,98 181"
+          stroke="url(#wlcmGrad)" strokeWidth="6" strokeLinecap="round"/>
+    {/* Head */}
+    <Path d="M60 28 C58 20,55 15,50 12 C44 8,38 10,42 16 C44 20,48 24,52 26 C52 26,55 28,60 28"
+          fill="url(#wlcmGrad)" stroke="none"/>
+    <Ellipse cx="48" cy="18" rx="13" ry="9" fill="url(#wlcmGrad)" opacity="0.95"/>
+    {/* Eyes */}
+    <Ellipse cx="42" cy="13" rx="3.5" ry="3" fill="url(#wlcmEye)" />
+    <Ellipse cx="55" cy="13" rx="3.5" ry="3" fill="url(#wlcmEye)" />
+    <Ellipse cx="42" cy="13" rx="1.2" ry="2.2" fill="#0a0e1a" />
+    <Ellipse cx="55" cy="13" rx="1.2" ry="2.2" fill="#0a0e1a" />
   </Svg>
 );
 
 export default function WelcomeScreen({ navigation }: WelcomeScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0f0f1a" />
-
+      <StatusBar barStyle="light-content" backgroundColor={colors.bgPrimary} />
       <View style={styles.content}>
+        {/* Snake-E logo — v1 style */}
         <View style={styles.logoContainer}>
-          <EIcon />
+          <SnakeELogo />
         </View>
 
-        <Text style={styles.title}>Kernel Mobile</Text>
+        <Text style={styles.title}>EVA</Text>
         <Text style={styles.tagline}>
           Your self-evolving AI agent.{'\n'}Chat, automate, evolve.
         </Text>
@@ -74,7 +101,7 @@ export default function WelcomeScreen({ navigation }: WelcomeScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f0f1a',
+    backgroundColor: colors.bgPrimary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -95,7 +122,7 @@ const styles = StyleSheet.create({
   },
   tagline: {
     fontSize: 14,
-    color: '#8b949e',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 40,
@@ -104,8 +131,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 280,
     paddingVertical: 14,
-    backgroundColor: '#1a6ed8',
-    borderRadius: 12,
+    backgroundColor: colors.buttonPrimary,
+    borderRadius: borderRadius.lg,
     alignItems: 'center',
   },
   startButtonText: {

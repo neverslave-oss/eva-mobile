@@ -11,7 +11,7 @@
 | 2 | **State Stores** | 🟢 Completed | (cherry-picked) | appStore + settingsStore on dev |
 | 3 | **API & Services** | 🟢 Completed | `feature/api-services` | KernelApiClient, SseStreamer, SqlitePersistence, VoiceService |
 | 4 | **Shared Components** | 🟢 Completed | `feature/shared-components` | 14 UI components: MessageBubble, ComposerBar, Toast, etc. |
-| 5 | **Screens & Navigation** | 🟡 In progress | `feature/screens-navigation` | Welcome + Onboarding on dev. Building BotList, Chat, Settings, BotProfile + MainTabs |
+| 5 | **Screens & Navigation** | 🟢 Completed | `feature/screens-navigation` | BotListScreen, ChatScreen, SettingsScreen, BotProfileScreen, MainTabs — all wired |
 | 6 | **CI/CD Pipeline** | 🔴 Not started | — | GHA workflow + self-hosted runner |
 
 ## Legend
