@@ -54,6 +54,7 @@ export type RootStackParamList = {
   [SCREEN_NAMES.Welcome]: undefined;
   [SCREEN_NAMES.Onboarding]: undefined;
   [SCREEN_NAMES.MainTabs]: undefined;
+  [SCREEN_NAMES.BotProfile]: { agentId: string };
 };
 
 export type MainTabParamList = {
