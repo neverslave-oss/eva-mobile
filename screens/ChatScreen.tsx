@@ -18,7 +18,7 @@ import {
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-audio';
+import { Audio } from 'expo-av';
 import { SCREEN_NAMES, Message, RootStackParamList } from '../types';
 import { useAgentStore } from '../stores/agentStore';
 import MessageBubble from '../components/MessageBubble';
@@ -143,13 +143,17 @@ export default function ChatScreen() {
   // Audio recording
   const [isRecording, setIsRecording] = useState(false);
   const [audioPermission, setAudioPermission] = useState(false);
-  const recordingRef = useRef<Audio.Recorder | null>(null);
+  const recordingRef = useRef<Audio.Recording | null>(null);
 
   // Request audio permission on mount
   useEffect(() => {
     (async () => {
-      const perm = await Audio.requestPermissionsAsync();
-      setAudioPermission(perm.granted);
+      try {
+        const perm = await Audio.requestPermissionsAsync();
+        setAudioPermission(perm.granted);
+      } catch {
+        setAudioPermission(false);
+      }
     })();
   }, []);
 
@@ -211,9 +215,10 @@ export default function ChatScreen() {
   const handleStartRecording = useCallback(async () => {
     if (!audioPermission) { Alert.alert('Permission Denied', 'Microphone access is required for voice memos.'); return; }
     try {
-      const recording = new Audio.Recorder();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await recording.startAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
       recordingRef.current = recording;
       setIsRecording(true);
     } catch (e) { console.warn('Recording start error:', e); }
@@ -223,7 +228,7 @@ export default function ChatScreen() {
     if (!recordingRef.current) return;
     try {
       await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.uri;
+      const uri = recordingRef.current.getURI() || '';
       setIsRecording(false);
       const userMsg: Message = { id: `msg-${Date.now()}`, chatId: botId || '', role: 'user', text: `🎤 Voice note recorded (${(uri.slice(-20))})`, timestamp: Date.now() };
       setMessages((prev) => [...prev, userMsg]);

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SCREEN_NAMES, Agent, RootStackParamList } from '../types';
 import { useAgentStore } from '../stores/agentStore';
+import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, typography, borderRadius, spacing } from '../theme';
 import Svg, { Path, Ellipse, Circle } from 'react-native-svg';
