@@ -7,11 +7,11 @@
 
 | # | Feature | Status | Branch | Notes |
 |---|---------|--------|--------|-------|
-| 1 | **Project Scaffold** | 🔴 Not started | — | Expo init, deps, TS strict, folder structure |
-| 2 | **State Stores** | 🔴 Not started | — | 4 Zustand stores + types |
+| 1 | **Project Scaffold** | 🟢 Completed | `dev/initial-scaffold` | Expo init, deps, TS strict, folder structure |
+| 2 | **State Stores** | 🟡 In progress | `dev/initial-scaffold` | appStore + settingsStore done (chatStore, agentStore pending) |
 | 3 | **API & Services** | 🔴 Not started | — | KernelApiClient, SseStreamer, Voice, SQLite |
 | 4 | **Shared Components** | 🔴 Not started | — | 14 reusable UI components |
-| 5 | **Screens & Navigation** | 🔴 Not started | — | Full screen tree + React Navigation |
+| 5 | **Screens & Navigation** | 🟡 In progress | `dev/initial-scaffold` | Welcome + Onboarding done, MainTabs placeholder |
 | 6 | **CI/CD Pipeline** | 🔴 Not started | — | GHA workflow + self-hosted runner |
 
 ## Legend
