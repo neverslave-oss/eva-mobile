@@ -57,12 +57,12 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleDebug --no-daemon
 
       - name: Rename APK
         run: |
           VERSION=$(node -p "require('./app.json').expo.version")
-          mv android/app/build/outputs/apk/release/app-release.apk \
+          mv android/app/build/outputs/apk/debug/app-debug.apk \
             kernel-mobile-v2-${VERSION}.apk
 
       - name: Upload APK artifact

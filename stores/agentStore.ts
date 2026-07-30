@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import type {
   Agent, SkillInfo, RoutineInfo, VoiceSample,
   ProviderRouting, ReplicaInfo, Message, WorkspaceNode,
+  DiscoveredPeer,
 } from '../types';
 import { kernelClient } from '../services/KernelApiClient';
 
