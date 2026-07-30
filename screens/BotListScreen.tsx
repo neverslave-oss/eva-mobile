@@ -76,10 +76,13 @@ export default function BotListScreen() {
 
   const descriptions: Record<string, { desc: string; type: string; host: string; port: number }> = {
     'kernel-main': { desc: 'Primary self-evolving agent', type: 'kernel', host: 'localhost', port: 8779 },
-    marty: { desc: 'Marketing content agent', type: 'agent', host: 'localhost', port: 8768 },
+    // Hermes agents are discovered via Hermes API (port 8642) on the LAN
+    // Individual agent ports below are placeholders; actual discovery happens
+    // by scanning for Hermes API (8642) and OpenClaw (18789) endpoints
+    marty: { desc: 'Marketing content agent', type: 'agent', host: 'localhost', port: 8642 },
     olly: { desc: 'Dev/infra assistant', type: 'agent', host: 'localhost', port: 18789 },
-    lawy: { desc: 'Legal document AI', type: 'agent', host: 'localhost', port: 8771 },
-    sage: { desc: 'Financial analytics', type: 'agent', host: 'localhost', port: 8772 },
+    lawy: { desc: 'Legal document AI', type: 'agent', host: 'localhost', port: 8642 },
+    sage: { desc: 'Financial analytics', type: 'agent', host: 'localhost', port: 8642 },
   };
 
   const renderAgent = ({ item }: { item: Agent }) => {
