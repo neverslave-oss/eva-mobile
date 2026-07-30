@@ -50,13 +50,7 @@ interface AgentState {
 }
 
 export const useAgentStore = create<AgentState>()((set, get) => ({
-  agents: [
-    { id: 'kernel-main', name: 'Kernel Main', status: 'checking' },
-    { id: 'marty', name: 'Marty', status: 'checking' },
-    { id: 'olly', name: 'Olly', status: 'checking' },
-    { id: 'lawy', name: 'Lawy', status: 'checking' },
-    { id: 'sage', name: 'Sage', status: 'checking' },
-  ],
+  agents: [],
   selectedAgentId: null,
   messages: [],
   isStreaming: false,
@@ -99,14 +93,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         const agents: Agent[] = info.map((a) => ({
           id: a.id,
           name: a.name,
+          description: a.description,
           status: a.status,
         }));
         set({ agents });
       } else {
-        // API available but no agents registered — show fallback as online
-        set((s) => ({
-          agents: s.agents.map((a) => ({ ...a, status: 'online' as const })),
-        }));
+        // API available but no agents registered — empty state
+        set({ agents: [] });
       }
     } catch {
       set((s) => ({

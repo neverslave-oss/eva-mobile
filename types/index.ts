@@ -14,6 +14,7 @@ export interface AppSettings {
 export interface Agent {
   id: string;
   name: string;
+  description?: string;
   status: 'online' | 'offline' | 'checking';
   avatar?: string;
   version?: string;
@@ -24,6 +25,7 @@ export interface Agent {
 export interface AgentInfo {
   id: string;
   name: string;
+  description?: string;
   status: 'online' | 'offline';
 }
 

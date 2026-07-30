@@ -74,19 +74,7 @@ export default function BotListScreen() {
     navigation.navigate(SCREEN_NAMES.Settings);
   };
 
-  const descriptions: Record<string, { desc: string; type: string; host: string; port: number }> = {
-    'kernel-main': { desc: 'Primary self-evolving agent', type: 'kernel', host: 'localhost', port: 8779 },
-    // Hermes agents are discovered via Hermes API (port 8642) on the LAN
-    // Individual agent ports below are placeholders; actual discovery happens
-    // by scanning for Hermes API (8642) and OpenClaw (18789) endpoints
-    marty: { desc: 'Marketing content agent', type: 'agent', host: 'localhost', port: 8642 },
-    olly: { desc: 'Dev/infra assistant', type: 'agent', host: 'localhost', port: 18789 },
-    lawy: { desc: 'Legal document AI', type: 'agent', host: 'localhost', port: 8642 },
-    sage: { desc: 'Financial analytics', type: 'agent', host: 'localhost', port: 8642 },
-  };
-
   const renderAgent = ({ item }: { item: Agent }) => {
-    const info = descriptions[item.id] || { desc: 'Agent', type: 'agent', host: 'localhost', port: 0 };
     const isOnline = item.status === 'online';
 
     return (
@@ -108,8 +96,8 @@ export default function BotListScreen() {
             <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
             <View style={[styles.inlineDot, { backgroundColor: STATUS_COLORS[item.status] }]} />
           </View>
-          <Text style={styles.desc} numberOfLines={1}>{info.desc}</Text>
-          <Text style={styles.meta}>{info.type} · {info.host}:{info.port}</Text>
+          <Text style={styles.desc} numberOfLines={1}>{item.description || 'Agent'}</Text>
+          <Text style={styles.meta}>{item.id} · {isOnline ? 'online' : 'offline'}</Text>
         </View>
 
         {/* Chevron */}
