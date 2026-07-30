@@ -8,26 +8,26 @@
 import * as Network from 'expo-network';
 
 export interface DiscoveredPeer {
+  id: string;
   name: string;
   ip: string;
   port: number;
   status: 'online' | 'offline';
 }
 
-const KNOWN_PORTS: { port: number; name: string }[] = [
+const KNOWN_PORTS: { port: number; name: string; id: string }[] = [
   // Kernel-evolving agent
-  { port: 8779, name: 'Kernel Evolving' },
+  { port: 8779, name: 'Kernel Evolving', id: 'kernel-main' },
   // OpenClaw gateway
-  { port: 18789, name: 'OpenClaw (Olly)' },
-  // Hermes Agent default API integration port — every Hermes agent instance
-  // exposes its API on this port for agent-to-agent communication
-  { port: 8642, name: 'Hermes Agent' },
+  { port: 18789, name: 'OpenClaw (Olly)', id: 'olly' },
+  // Hermes Agent default API integration port
+  { port: 8642, name: 'Hermes Agent', id: 'hermes' },
   // Additional services
-  { port: 8769, name: 'Kernel (Base)' },
-  { port: 8765, name: 'Fantasia' },
-  { port: 8766, name: 'Olly Voice' },
-  { port: 8770, name: 'Olly Embed' },
-  { port: 8005, name: 'Private AI' },
+  { port: 8769, name: 'Kernel (Base)', id: 'kernel-base' },
+  { port: 8765, name: 'Fantasia', id: 'fantasia' },
+  { port: 8766, name: 'Olly Voice', id: 'olly-voice' },
+  { port: 8770, name: 'Olly Embed', id: 'olly-embed' },
+  { port: 8005, name: 'Private AI', id: 'private-ai' },
 ];
 
 const SCAN_CONCURRENCY = 8;
@@ -59,7 +59,7 @@ function subnetBase(ip: string): string {
  * Probe a single IP:port for a /health endpoint.
  * Returns the service name if reachable, null otherwise.
  */
-async function probeHost(ip: string, port: number, name: string): Promise<DiscoveredPeer | null> {
+export async function probeHost(ip: string, port: number, name: string, id: string): Promise<DiscoveredPeer | null> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT);
@@ -71,7 +71,7 @@ async function probeHost(ip: string, port: number, name: string): Promise<Discov
     clearTimeout(timer);
 
     if (res.ok || res.status === 200) {
-      return { name, ip, port, status: 'online' };
+      return { id, name, ip, port, status: 'online' };
     }
     return null;
   } catch {
@@ -100,7 +100,7 @@ export async function scanLan(
   for (let i = 0; i < ips.length; i += SCAN_CONCURRENCY) {
     const batch = ips.slice(i, i + SCAN_CONCURRENCY);
     const probes = batch.flatMap((ip) =>
-      KNOWN_PORTS.map(({ port, name }) => probeHost(ip, port, name))
+      KNOWN_PORTS.map(({ port, name, id }) => probeHost(ip, port, name, id))
     );
 
     const batchResults = await Promise.allSettled(probes);
@@ -122,7 +122,7 @@ export async function scanLan(
  * Useful for initial connection without flooding the network.
  */
 export async function quickScanLocalhost(): Promise<DiscoveredPeer[]> {
-  const probes = KNOWN_PORTS.map(({ port, name }) => probeHost('127.0.0.1', port, name));
+  const probes = KNOWN_PORTS.map(({ port, name, id }) => probeHost('127.0.0.1', port, name, id));
   const results = await Promise.allSettled(probes);
   return results
     .filter((r): r is PromiseFulfilledResult<DiscoveredPeer> => r.status === 'fulfilled' && r.value !== null)
