@@ -1,0 +1,71 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  test:
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npx expo-doctor
+      - run: npx tsc --noEmit
+      - run: npx jest --ci
+
+  build-android:
+    needs: test
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - run: npm ci
+      - name: Build APK (Gradle)
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon
+      - name: Rename APK
+        run: |
+          VERSION=$(node -p "require('./app.json').expo.version")
+          mv android/app/build/outputs/apk/release/app-release.apk \
+            kernel-mobile-v2-${VERSION}.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: kernel-mobile-v2-*.apk
+
+  release:
+    needs: [build-android]
+    runs-on: [self-hosted, linux, x64]
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Create GitHub Release
+        run: |
+          gh release create ${{ github.ref_name }} \
+            kernel-mobile-v2-*.apk \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
