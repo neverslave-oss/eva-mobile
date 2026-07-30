@@ -121,8 +121,15 @@ export interface SlashCommand {
   description: string;
 }
 
+export interface DiscoveredPeer {
+  id: string;
+  name: string;
+  ip: string;
+  port: number;
+  status: 'online' | 'offline';
+}
+
 export type CallType =
-  | 'task_inference'
   | 'synthesis'
   | 'critic'
   | 'planning'

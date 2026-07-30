@@ -14,9 +14,10 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAppStore } from '../stores/appStore';
+import { useAgentStore } from '../stores/agentStore';
 import { RootStackParamList } from '../types';
 import { colors, typography, borderRadius, spacing } from '../theme';
-import { scanLan, DiscoveredPeer } from '../services/NetworkDiscovery';
+import { scanLan, quickScanLocalhost, DiscoveredPeer } from '../services/NetworkDiscovery';
 import Svg, { Path } from 'react-native-svg';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -40,6 +41,7 @@ export default function SettingsScreen() {
   const [peers, setPeers] = useState<DiscoveredPeer[]>([]);
   const [scanProgress, setScanProgress] = useState<string | null>(null);
   const [scanDone, setScanDone] = useState(false);
+  const feedDiscoveredPeers = useAgentStore((s) => s.feedDiscoveredPeers);
 
   // Auto-scan on mount
   useEffect(() => {
@@ -87,9 +89,21 @@ export default function SettingsScreen() {
     setScanProgress('Scanning LAN…');
     setScanDone(false);
     try {
+      // Quick scan localhost first (fast — same machine)
+      const local = await quickScanLocalhost();
+      if (local.length > 0) {
+        feedDiscoveredPeers(local);
+        setPeers(local);
+        setScanDone(true);
+        setScanProgress(`Found ${local.length} agent(s) locally`);
+        setScanning(false);
+        return;
+      }
+      // Fallback to full subnet scan
       const discovered = await scanLan((found, total) => {
         setScanProgress(`Found ${found} agent(s) — probing…`);
       });
+      feedDiscoveredPeers(discovered);
       setPeers(discovered);
       setScanDone(true);
       if (discovered.length === 0) {

@@ -3,7 +3,10 @@
  * Replaces mock agents with data from KernelApiClient
  */
 import { create } from 'zustand';
-import { Agent, SkillInfo, RoutineInfo, VoiceSample, ProviderRouting, ReplicaInfo, Message, ToolCallInfo, WorkspaceNode } from '../types';
+import type {
+  Agent, SkillInfo, RoutineInfo, VoiceSample,
+  ProviderRouting, ReplicaInfo, Message, WorkspaceNode,
+} from '../types';
 import { kernelClient } from '../services/KernelApiClient';
 
 interface AgentState {
@@ -32,6 +35,7 @@ interface AgentState {
   // Actions
   setAgents: (agents: Agent[]) => void;
   addAgent: (agent: Agent) => void;
+  feedDiscoveredPeers: (peers: DiscoveredPeer[]) => void;
   updateAgentStatus: (id: string, status: Agent['status']) => void;
   selectAgent: (id: string | null) => void;
   setMessages: (messages: Message[]) => void;
@@ -67,6 +71,20 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     set((state) => ({
       agents: state.agents.some((a) => a.id === agent.id) ? state.agents : [...state.agents, agent],
     })),
+  feedDiscoveredPeers: (peers) =>
+    set((state) => {
+      const existingIds = new Set(state.agents.map((a) => a.id));
+      const newAgents: Agent[] = peers
+        .filter((p) => !existingIds.has(p.id))
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          description: `🌐 LAN · ${p.ip}:${p.port}`,
+          status: p.status === 'online' ? 'online' as const : 'checking' as const,
+        }));
+      if (newAgents.length === 0) return state;
+      return { agents: [...state.agents, ...newAgents] };
+    }),
   updateAgentStatus: (id, status) =>
     set((state) => ({
       agents: state.agents.map((a) => (a.id === id ? { ...a, status } : a)),
