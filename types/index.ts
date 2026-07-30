@@ -130,6 +130,7 @@ export interface DiscoveredPeer {
 }
 
 export type CallType =
+  | 'task_inference'
   | 'synthesis'
   | 'critic'
   | 'planning'
