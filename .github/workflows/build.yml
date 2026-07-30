@@ -10,7 +10,7 @@ env:
 
 jobs:
   test:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,48 +24,99 @@ jobs:
 
   build-android:
     needs: test
-    runs-on: [self-hosted, linux, x64]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - run: npm ci
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Expo prebuild
+        run: npx expo prebuild --platform android --no-install
+
       - name: Build APK (Gradle)
         run: |
           cd android
+          chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
+
       - name: Rename APK
         run: |
           VERSION=$(node -p "require('./app.json').expo.version")
           mv android/app/build/outputs/apk/release/app-release.apk \
             kernel-mobile-v2-${VERSION}.apk
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: android-apk
+          name: kernel-mobile-v2-android
           path: kernel-mobile-v2-*.apk
 
   release:
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [build-android]
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
         with:
-          merge-multiple: true
-      - name: Create GitHub Release
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
         run: |
-          gh release create ${{ github.ref_name }} \
-            kernel-mobile-v2-*.apk \
-            --title "${{ github.ref_name }}" \
-            --generate-notes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            git log --oneline --no-decorate > CHANGELOG.md
+          else
+            git log --oneline --no-decorate ${PREV_TAG}..HEAD > CHANGELOG.md
+          fi
+          {
+            echo 'changelog<<EOF'
+            cat CHANGELOG.md
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kernel-mobile-v2-android
+          path: dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "kernel-mobile-v2 ${{ github.ref_name }}"
+          tag_name: ${{ github.ref_name }}
+          body: |
+            ## kernel-mobile-v2 ${{ github.ref_name }}
+
+            ### Changes
+            ${{ steps.changelog.outputs.changelog }}
+
+            ### Downloads
+            - **Android APK**: kernel-mobile-v2-*.apk
+          files: dist/kernel-mobile-v2-*.apk
+          draft: false
+          prerelease: false
