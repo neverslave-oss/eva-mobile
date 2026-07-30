@@ -3,7 +3,7 @@
  * Replaces mock agents with data from KernelApiClient
  */
 import { create } from 'zustand';
-import { Agent, SkillInfo, RoutineInfo, VoiceSample, ProviderRouting, ReplicaInfo, Message, ToolCallInfo } from '../types';
+import { Agent, SkillInfo, RoutineInfo, VoiceSample, ProviderRouting, ReplicaInfo, Message, ToolCallInfo, WorkspaceNode } from '../types';
 import { kernelClient } from '../services/KernelApiClient';
 
 interface AgentState {
@@ -18,6 +18,9 @@ interface AgentState {
 
   // Provider Routing
   providerRouting: ProviderRouting | null;
+
+  // Workspace
+  workspaceTree: WorkspaceNode | null;
 
   // Voice
   voiceSamples: VoiceSample[];
@@ -40,6 +43,7 @@ interface AgentState {
   fetchProviderRouting: () => Promise<void>;
   fetchVoiceSamples: () => Promise<void>;
   fetchReplicas: () => Promise<void>;
+  fetchWorkspaceTree: () => Promise<void>;
   sendMessage: (text: string) => Promise<Message | null>;
   sendSlashCommand: (cmd: string) => Promise<Message | null>;
   clearConversation: () => Promise<void>;
@@ -59,6 +63,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   skills: [],
   routines: [],
   providerRouting: null,
+  workspaceTree: null,
   voiceSamples: [],
   activeVoiceSample: '',
   replicas: [],
@@ -133,6 +138,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   fetchReplicas: async () => {
     const replicas = await kernelClient.listReplicas();
     set({ replicas });
+  },
+
+  fetchWorkspaceTree: async () => {
+    const tree = await kernelClient.getWorkspaceTree();
+    set({ workspaceTree: tree ?? null });
   },
 
   // ── Send message via real API ──

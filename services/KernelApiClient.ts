@@ -274,15 +274,15 @@ class KernelApiClient {
 
   // ── Workspace File Tree ─────────────────────────────────────────
 
-  async getWorkspaceTree(dir?: string): Promise<any[]> {
+  async getWorkspaceTree(dir?: string): Promise<any> {
     try {
       const res = await this.client.get(`${this.base}/workspace/tree`, {
         params: { dir: dir || '/' },
         timeout: 5000,
         headers: this.authHeaders(),
       });
-      return res.data?.tree ?? [];
-    } catch { return []; }
+      return res.data ?? null;
+    } catch { return null; }
   }
 
   // ── Voice ───────────────────────────────────────────────────────

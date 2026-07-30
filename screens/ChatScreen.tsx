@@ -19,7 +19,7 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
-import { SCREEN_NAMES, Message, RootStackParamList, ProviderRouting } from '../types';
+import { SCREEN_NAMES, Message, RootStackParamList, ProviderRouting, WorkspaceNode } from '../types';
 import { useAgentStore } from '../stores/agentStore';
 import MessageBubble from '../components/MessageBubble';
 import CommandSheet from '../components/CommandSheet';
@@ -100,18 +100,17 @@ const TypingDots = ({ color = colors.accent }: { color?: string }) => {
   return (<View style={{ flexDirection: 'row', gap: 3, paddingHorizontal: 4, alignItems: 'flex-end' }}>{anim.map((a, i) => <Animated.View key={i} style={[{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }, { transform: [{ translateY: a }] }]} />)}</View>);
 };
 
-// ─── Mock workspace tree ───
-const MOCK_WORKSPACE_TREE: WorkspaceNode[] = [
-  { name: 'src/', type: 'dir', children: [{ name: 'services/', type: 'dir', children: [{ name: 'kernel_api.py', type: 'file', size: '12 KB' }, { name: 'sse_streamer.py', type: 'file', size: '8 KB' }] }, { name: 'utils/', type: 'dir', children: [{ name: 'helpers.ts', type: 'file', size: '4 KB' }, { name: 'parser.ts', type: 'file', size: '6 KB' }] }, { name: 'index.ts', type: 'file', size: '2 KB' }] },
-  { name: 'config/', type: 'dir', children: [{ name: 'config.yaml', type: 'file', size: '3 KB' }, { name: '.env', type: 'file', size: '1 KB' }] },
-  { name: 'README.md', type: 'file', size: '8 KB' },
-  { name: 'package.json', type: 'file', size: '1.2 KB' },
-];
 
-interface WorkspaceNode { name: string; type: 'dir' | 'file'; children?: WorkspaceNode[]; size?: string; }
 
 // ─── Emojis ───
 const EMOJIS = ['😀','😂','🤣','😍','🥰','😘','😋','🤔','👍','👎','👏','🙌','💪','🔥','❤️','🧡','💛','💚','💙','💜','🖤','🤍','🎉','✨','🌟','💯','✅','❌','⚠️','💡','📌','📎','🗑️','🎵','📷','📄','🎙️','💻','🔧','🛠️','🧬','🤖','🐱','🐶','🦊','🐼','🐨'];
+
+const formatBytes = (bytes?: number): string => {
+  if (bytes == null) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 const QUICK_CMDS = ['/status', '/skills', '/routines', '/models'];
 
@@ -127,6 +126,8 @@ export default function ChatScreen() {
   const clearConversation = useAgentStore((s) => s.clearConversation);
   const fetchProviderRouting = useAgentStore((s) => s.fetchProviderRouting);
   const providerRouting = useAgentStore((s) => s.providerRouting);
+  const workspaceTree = useAgentStore((s) => s.workspaceTree);
+  const fetchWorkspaceTree = useAgentStore((s) => s.fetchWorkspaceTree);
   const flatListRef = useRef<FlatList>(null);
   const textareaRef = useRef<TextInput>(null);
 
@@ -163,6 +164,11 @@ export default function ChatScreen() {
       }
     })();
   }, []);
+
+  // ── Fetch workspace tree on mount ──
+  useEffect(() => {
+    fetchWorkspaceTree();
+  }, [fetchWorkspaceTree]);
 
   // Auto-scroll
   useEffect(() => {
@@ -299,7 +305,7 @@ export default function ChatScreen() {
         {node.type === 'dir' ? '📁' : '📄'}
       </Text>
       <Text style={[styles.treeName, { fontWeight: node.type === 'dir' ? '600' : '400' }]}>{node.name}</Text>
-      {node.size && <Text style={styles.treeSize}>{node.size}</Text>}
+      {node.size != null && <Text style={styles.treeSize}>{formatBytes(node.size)}</Text>}
       {node.children?.map((ch) => renderTreeNode(ch, depth + 1))}
     </View>
   );
@@ -475,7 +481,13 @@ export default function ChatScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.offcanvasContent}>
-              {MOCK_WORKSPACE_TREE.map((node) => renderTreeNode(node))}
+              {workspaceTree ? (
+                workspaceTree.children?.map((node) => renderTreeNode(node)) ?? (
+                  <Text style={{ color: colors.textMuted, padding: 16 }}>Empty workspace</Text>
+                )
+              ) : (
+                <Text style={{ color: colors.textMuted, padding: 16 }}>Loading workspace tree…</Text>
+              )}
             </ScrollView>
           </View>
         </SafeAreaView>

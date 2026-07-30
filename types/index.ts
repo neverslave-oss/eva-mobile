@@ -54,6 +54,17 @@ export interface Chat {
 
 // ── Kernel-Evolving API types ──────────────────────────────────────
 
+// ── Workspace File Tree ─────────────────────────────────────────
+
+export interface WorkspaceNode {
+  name: string;
+  type: 'dir' | 'file';
+  size?: number;
+  children?: WorkspaceNode[];
+}
+
+// ── Kernel-Evolving API types ──────────────────────────────────────
+
 export interface SystemStatus {
   status: string;
   version?: string;
