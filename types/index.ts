@@ -5,6 +5,8 @@ export type ConnectionMode = 'direct' | 'proxy';
 export interface AppSettings {
   mode: ConnectionMode;
   serverUrl: string;
+  proxyUrl: string;
+  authToken: string;
   onboardingCompleted: boolean;
   theme: 'dark' | 'light';
 }
@@ -14,6 +16,15 @@ export interface Agent {
   name: string;
   status: 'online' | 'offline' | 'checking';
   avatar?: string;
+  version?: string;
+  uptime?: string;
+  model?: string;
+}
+
+export interface AgentInfo {
+  id: string;
+  name: string;
+  status: 'online' | 'offline';
 }
 
 export interface Message {
@@ -23,6 +34,14 @@ export interface Message {
   text: string;
   timestamp: number;
   streaming?: boolean;
+  toolCalls?: ToolCallInfo[];
+}
+
+export interface ToolCallInfo {
+  step: number;
+  toolName: string;
+  args: string;
+  result: string;
 }
 
 export interface Chat {
@@ -33,9 +52,110 @@ export interface Chat {
   createdAt: number;
 }
 
+// ── Kernel-Evolving API types ──────────────────────────────────────
+
+export interface SystemStatus {
+  status: string;
+  version?: string;
+  uptime?: string;
+  model?: string;
+  vram?: string;
+  cpu?: string;
+  ram?: string;
+}
+
+export interface ProviderRouting {
+  routing: Record<string, ProviderRoute>;
+  collect_trajectories?: boolean;
+}
+
+export interface ProviderRoute {
+  provider: string;
+  model?: string;
+  streaming?: boolean;
+}
+
+export interface SkillInfo {
+  name: string;
+  description: string;
+  slug: string;
+  version?: string;
+}
+
+export interface RoutineInfo {
+  name: string;
+  description: string;
+  trigger: string;
+  slug?: string;
+}
+
+export interface ReplicaInfo {
+  id: string;
+  name: string;
+  role: string;
+  status: string;
+  created_at: string;
+}
+
+export interface VoiceSample {
+  name: string;
+  path: string;
+  active?: boolean;
+}
+
+export interface SlashCommand {
+  command: string;
+  description: string;
+}
+
+export type CallType =
+  | 'task_inference'
+  | 'synthesis'
+  | 'critic'
+  | 'planning'
+  | 'trajectory_teacher'
+  | 'vision'
+  | 'stt'
+  | 'tts';
+
+export const CALL_TYPES: CallType[] = [
+  'task_inference',
+  'synthesis',
+  'critic',
+  'planning',
+  'trajectory_teacher',
+  'vision',
+  'stt',
+  'tts',
+];
+
+export const CALL_TYPE_LABELS: Record<CallType, string> = {
+  task_inference: 'Chat (task inference)',
+  synthesis: 'Skill synthesis',
+  critic: 'Critic / verification',
+  planning: 'Task planning',
+  trajectory_teacher: 'Teacher trajectories',
+  vision: 'Vision (images)',
+  stt: 'Speech-to-Text',
+  tts: 'Text-to-Speech / voice clone',
+};
+
+export const PROVIDER_NAMES: Record<string, string> = {
+  local: '🏠 Local',
+  openai: '🤖 OpenAI',
+  openrouter: '🌐 OpenRouter',
+  anthropic: '🧠 Anthropic',
+  hf: '🤗 HuggingFace',
+  copilot: '⚡ Copilot',
+};
+
+// ── Defaults ───────────────────────────────────────────────────────
+
 export const DEFAULT_SETTINGS: AppSettings = {
   mode: 'direct',
   serverUrl: 'http://localhost:8779',
+  proxyUrl: 'https://kernel-central/api/v1',
+  authToken: '',
   onboardingCompleted: false,
   theme: 'dark',
 };

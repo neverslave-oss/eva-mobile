@@ -13,6 +13,7 @@
 | 4 | **Shared Components** | 🟢 Completed | `feature/shared-components` | 14 UI components: MessageBubble, ComposerBar, Toast, etc. |
 | 5 | **Screens & Navigation** | 🟢 Completed | `feature/screens-navigation` | BotListScreen, ChatScreen, SettingsScreen, BotProfileScreen, MainTabs — all wired |
 | 6 | **CI/CD Pipeline** | 🔴 Not started | — | GHA workflow + self-hosted runner |
+| 7 | **Agent Chat + Telegram Pair** | 🟡 In progress | `dev` | Wire real API calls, provider routing, voice clone, inspector, command sheet, dual-mode |
 
 ## Legend
 
@@ -29,6 +30,7 @@
 - `.specs/plans/feature-shared-components.md`
 - `.specs/plans/feature-screens-navigation.md`
 - `.specs/plans/feature-ci-cd-pipeline.md`
+- `.specs/plans/feature-agent-chat-telegram-pair.md`
 
 ## ADR
 

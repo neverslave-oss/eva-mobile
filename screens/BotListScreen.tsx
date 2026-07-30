@@ -51,14 +51,19 @@ const SnakeEMini = ({ size = 24 }: { size?: number }) => (
 
 export default function BotListScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { agents, selectedAgentId, selectAgent } = useAgentStore();
+  const { agents, selectedAgentId, selectAgent, fetchAgents } = useAgentStore();
   const [refreshing, setRefreshing] = React.useState(false);
+
+  // Fetch real agents from kernel-evolving on mount
+  React.useEffect(() => {
+    fetchAgents();
+  }, []);
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
-    await new Promise((r) => setTimeout(r, 1000));
+    await fetchAgents();
     setRefreshing(false);
-  }, []);
+  }, [fetchAgents]);
 
   const handleAgentPress = (agent: Agent) => {
     selectAgent(agent.id);
@@ -124,7 +129,10 @@ export default function BotListScreen() {
 
       {/* Count below header (v1 style) */}
       <View style={styles.headerCountRow}>
-        <Text style={styles.headerCount}>{agents.length} connected</Text>
+        <Text style={styles.headerCount}>
+          {agents.filter((a) => a.status === 'online').length} online · {agents.length} total
+          {agents.some((a) => a.status === 'offline') && ' · ⚠️ server unreachable'}
+        </Text>
       </View>
 
       <FlatList

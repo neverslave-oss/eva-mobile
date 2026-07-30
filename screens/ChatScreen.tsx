@@ -19,20 +19,21 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
-import { SCREEN_NAMES, Message, RootStackParamList } from '../types';
+import { SCREEN_NAMES, Message, RootStackParamList, ProviderRouting } from '../types';
 import { useAgentStore } from '../stores/agentStore';
 import MessageBubble from '../components/MessageBubble';
+import CommandSheet from '../components/CommandSheet';
+import ProviderSheet from '../components/ProviderSheet';
+import InspectorPanel from '../components/InspectorPanel';
 import { colors, typography, borderRadius, spacing } from '../theme';
 import Svg, { Path, Ellipse, Defs, LinearGradient, Stop, Circle, Rect } from 'react-native-svg';
 
 // ─── Local types ───
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
-// ─── Slash command registry (mirrors kernel-evolving Telegram bot commands) ───
-const SLASH_COMMANDS: Record<string, string> = {
-  '/start': 'Initialize agent session',
+// ─── Slash command descriptions for autocomplete (source: telegram_bot.py) ───
+const SLASH_DESCRIPTIONS: Record<string, string> = {
   '/help': 'Show available commands',
-  '/new': 'Clear conversation and start fresh',
   '/status': 'Agent status, uptime, model info',
   '/skills': 'List loaded skills',
   '/routines': 'List active routines',
@@ -49,7 +50,6 @@ const SLASH_COMMANDS: Record<string, string> = {
   '/restart': 'Full agent restart',
   '/update': 'Pull latest version from repo',
   '/rollback': 'Rollback to previous version',
-  '/packages': 'Install or update pip packages',
   '/system': 'System diagnostics (CPU/GPU/RAM)',
   '/version': 'Show agent version info',
   '/thoughts': 'Show Kernel\'s current thoughts',
@@ -113,7 +113,6 @@ interface WorkspaceNode { name: string; type: 'dir' | 'file'; children?: Workspa
 // ─── Emojis ───
 const EMOJIS = ['😀','😂','🤣','😍','🥰','😘','😋','🤔','👍','👎','👏','🙌','💪','🔥','❤️','🧡','💛','💚','💙','💜','🖤','🤍','🎉','✨','🌟','💯','✅','❌','⚠️','💡','📌','📎','🗑️','🎵','📷','📄','🎙️','💻','🔧','🛠️','🧬','🤖','🐱','🐶','🦊','🐼','🐨'];
 
-const MOCK_MESSAGES: Record<string, Message[]> = {};
 const QUICK_CMDS = ['/status', '/skills', '/routines', '/models'];
 
 export default function ChatScreen() {
@@ -121,15 +120,19 @@ export default function ChatScreen() {
   const navigation = useNavigation<NavProp>();
   const botId = route.params?.botId;
   const agent = useAgentStore((s) => s.agents.find((a) => a.id === botId));
+  const storeMessages = useAgentStore((s) => s.messages);
+  const storeIsStreaming = useAgentStore((s) => s.isStreaming);
+  const sendMessage = useAgentStore((s) => s.sendMessage);
+  const sendSlashCommand = useAgentStore((s) => s.sendSlashCommand);
+  const clearConversation = useAgentStore((s) => s.clearConversation);
+  const fetchProviderRouting = useAgentStore((s) => s.fetchProviderRouting);
+  const providerRouting = useAgentStore((s) => s.providerRouting);
   const flatListRef = useRef<FlatList>(null);
   const textareaRef = useRef<TextInput>(null);
 
   // States
-  const [messages, setMessages] = useState<Message[]>(botId ? MOCK_MESSAGES[botId] || [] : []);
   const [composerText, setComposerText] = useState('');
   const [inputHeight, setInputHeight] = useState(44);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingText, setStreamingText] = useState('');
   const [toolsEnabled, setToolsEnabled] = useState(false);
 
   // Overlay states
@@ -139,6 +142,10 @@ export default function ChatScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expandOpen, setExpandOpen] = useState(false);
   const [expandText, setExpandText] = useState('');
+  // Agent chat tab overlays
+  const [commandSheetOpen, setCommandSheetOpen] = useState(false);
+  const [providerSheetOpen, setProviderSheetOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
 
   // Audio recording
   const [isRecording, setIsRecording] = useState(false);
@@ -159,44 +166,23 @@ export default function ChatScreen() {
 
   // Auto-scroll
   useEffect(() => {
-    if (messages.length > 0) setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [messages]);
+    if (storeMessages.length > 0) setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+  }, [storeMessages]);
 
   // ── Send message ──
   const handleSend = useCallback((text: string) => {
     if (!text.trim() || !botId) return;
     const trimmed = text.trim();
-
-    // If it's a slash command, respond with mock (wire to real API later)
-    const cmdDesc = SLASH_COMMANDS[trimmed];
-    if (cmdDesc) {
-      const userMsg: Message = { id: `msg-${Date.now()}`, chatId: botId, role: 'user', text: trimmed, timestamp: Date.now() };
-      const reply = `🐬 *${trimmed}* — ${cmdDesc}\n\n*This command routes to kernel-evolving's Telegram bot handler in production.* The API integration will be wired once the service layer connects.`;
-      setMessages((prev) => [...prev, userMsg, { id: `msg-${Date.now()}-ai`, chatId: botId, role: 'assistant', text: reply, timestamp: Date.now() }]);
-      return;
-    }
-
-    const userMsg: Message = { id: `msg-${Date.now()}`, chatId: botId, role: 'user', text: trimmed, timestamp: Date.now() };
-    setMessages((prev) => [...prev, userMsg]);
     setComposerText('');
     setInputHeight(44);
 
-    // Simulate streaming
-    setIsStreaming(true);
-    setStreamingText('');
-    const resp = `Hello! I'm ${agent?.name || 'Kernel'}. Real SSE streaming will be wired once the API layer connects.`;
-    let ci = 0;
-    const iv = setInterval(() => {
-      ci++;
-      setStreamingText(resp.slice(0, ci * 4));
-      if (ci * 4 >= resp.length) {
-        clearInterval(iv);
-        setIsStreaming(false);
-        setMessages((prev) => [...prev, { id: `msg-${Date.now()}-ai`, chatId: botId, role: 'assistant', text: resp, timestamp: Date.now() }]);
-        setStreamingText('');
-      }
-    }, 40);
-  }, [botId, agent]);
+    // Route through real agentStore — sends to kernel-evolving API
+    if (trimmed.startsWith('/')) {
+      sendSlashCommand(trimmed);
+    } else {
+      sendMessage(trimmed);
+    }
+  }, [botId, sendMessage, sendSlashCommand]);
 
   // ── Camera picker ──
   const handleCamera = useCallback(async () => {
@@ -207,7 +193,7 @@ export default function ChatScreen() {
       const img = result.assets[0];
       const caption = `📷 Image captured`;
       const userMsg: Message = { id: `msg-${Date.now()}`, chatId: botId || '', role: 'user', text: `${caption}\n${img.uri}`, timestamp: Date.now() };
-      setMessages((prev) => [...prev, userMsg]);
+      useAgentStore.getState().addMessage(userMsg);
     }
   }, [botId]);
 
@@ -231,7 +217,7 @@ export default function ChatScreen() {
       const uri = recordingRef.current.getURI() || '';
       setIsRecording(false);
       const userMsg: Message = { id: `msg-${Date.now()}`, chatId: botId || '', role: 'user', text: `🎤 Voice note recorded (${(uri.slice(-20))})`, timestamp: Date.now() };
-      setMessages((prev) => [...prev, userMsg]);
+      useAgentStore.getState().addMessage(userMsg);
     } catch (e) { console.warn('Recording stop error:', e); }
     recordingRef.current = null;
   }, [botId]);
@@ -240,10 +226,12 @@ export default function ChatScreen() {
 
   const handleMenuAction = (action: string) => {
     setMenuOpen(false);
-    if (action === 'new') { setMessages([]); setIsStreaming(false); setStreamingText(''); }
+    if (action === 'new') { clearConversation(); }
     else if (action === 'profile' && botId) navigation.navigate(SCREEN_NAMES.BotProfile, { agentId: botId });
     else if (action === 'settings') navigation.navigate(SCREEN_NAMES.Settings);
     else if (action === 'files') setFileTreeOpen(true);
+    else if (action === 'commands') setCommandSheetOpen(true);
+    else if (action === 'inspector') setInspectorOpen(true);
   };
 
   const insertEmoji = (e: string) => { setComposerText((p) => p + e); setEmojiOpen(false); };
@@ -254,7 +242,7 @@ export default function ChatScreen() {
   const filteredCommands = React.useMemo(() => {
     if (!composerText.startsWith('/')) return [];
     const input = composerText.toLowerCase().trim();
-    return Object.entries(SLASH_COMMANDS)
+    return Object.entries(SLASH_DESCRIPTIONS)
       .filter(([cmd]) => cmd.startsWith(input))
       .slice(0, 8);
   }, [composerText]);
@@ -290,14 +278,13 @@ export default function ChatScreen() {
   );
 
   const StreamingFooter = () => {
-    if (!isStreaming || !streamingText) return null;
+    if (!storeIsStreaming) return null;
     return (
       <View style={styles.msgRowBot}>
         <View style={styles.msgBotAvatarWrap}><View style={styles.msgBotAvatar}><SnakeEIcon size={20} /></View></View>
         <View style={{ maxWidth: '82%' }}>
-          <Text style={styles.msgAgentLabel}>{agent?.name || 'Agent'} typing…</Text>
+          <Text style={styles.msgAgentLabel}>{agent?.name || 'Agent'} thinking…</Text>
           <View style={styles.streamingBubble}>
-            <Text style={styles.streamingText}>{streamingText}</Text>
             <View style={styles.streamingDots}><TypingDots color={colors.accent} /></View>
           </View>
         </View>
@@ -334,7 +321,7 @@ export default function ChatScreen() {
         <TouchableOpacity style={styles.hdrBtn} onPress={() => setFileTreeOpen(true)}><FolderIcon /></TouchableOpacity>
         <TouchableOpacity style={styles.hdrInfo} onPress={handleAgentTap}>
           <Text style={styles.hdrTitle} numberOfLines={1}>{agent?.name || 'Chat'}</Text>
-          {isStreaming ? (
+          {storeIsStreaming ? (
             <View style={styles.hdrTyping}><TypingDots color={colors.accent} /><Text style={styles.hdrTypingLabel}>typing</Text></View>
           ) : (
             <Text style={styles.hdrSub}>{agent?.status || 'bot'}</Text>
@@ -378,7 +365,7 @@ export default function ChatScreen() {
         ) : (
           <FlatList
             ref={flatListRef}
-            data={messages}
+            data={storeMessages}
             keyExtractor={(item) => item.id}
             renderItem={renderMessage}
             contentContainerStyle={styles.msgList}
@@ -507,6 +494,33 @@ export default function ChatScreen() {
           <TextInput style={styles.expandInput} value={expandText} onChangeText={setExpandText} placeholder="Message" placeholderTextColor={colors.textMuted} multiline autoFocus />
         </SafeAreaView>
       </Modal>
+
+      {/* ═══ COMMAND SHEET (bottom sheet — evolution_dashboard agent-command-sheet) ═══ */}
+      <CommandSheet
+        visible={commandSheetOpen}
+        onClose={() => setCommandSheetOpen(false)}
+        onSelectCommand={(cmd) => {
+          setComposerText(cmd + ' ');
+          textareaRef.current?.focus();
+        }}
+      />
+
+      {/* ═══ PROVIDER SHEET (side sheet — evolution_dashboard agent-provider-sheet) ═══ */}
+      <ProviderSheet
+        visible={providerSheetOpen}
+        onClose={() => setProviderSheetOpen(false)}
+        routing={providerRouting}
+        onRefresh={() => { fetchProviderRouting(); }}
+      />
+
+      {/* ═══ INSPECTOR PANEL (evolution_dashboard agent-inspector) ═══ */}
+      {inspectorOpen && (
+        <InspectorPanel
+          visible={inspectorOpen}
+          onClose={() => setInspectorOpen(false)}
+          messages={storeMessages}
+        />
+      )}
     </SafeAreaView>
   );
 }
