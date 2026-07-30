@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,26 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAppStore } from '../stores/appStore';
+import { RootStackParamList } from '../types';
 import { colors, typography, borderRadius, spacing } from '../theme';
+import { scanLan, DiscoveredPeer } from '../services/NetworkDiscovery';
+import Svg, { Path } from 'react-native-svg';
 
-const MOCK_PEERS = [
-  { name: 'MSI-Workstation', port: 8779, status: 'online' as const },
-  { name: 'ThinkPad-X1', port: 8778, status: 'offline' as const },
-];
+type NavProp = NativeStackNavigationProp<RootStackParamList>;
+
+// Mini SVG back arrow
+const ArrowBack = () => (
+  <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+    <Path d="M15 19l-7-7 7-7" stroke="#8b949e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </Svg>
+);
 
 export default function SettingsScreen() {
+  const navigation = useNavigation<NavProp>();
   const { mode, serverUrl, setMode, setServerUrl } = useSettingsStore();
   const { setOnboardingCompleted } = useAppStore();
   const [localUrl, setLocalUrl] = useState(serverUrl);
@@ -27,7 +37,14 @@ export default function SettingsScreen() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [peers, setPeers] = useState(MOCK_PEERS);
+  const [peers, setPeers] = useState<DiscoveredPeer[]>([]);
+  const [scanProgress, setScanProgress] = useState<string | null>(null);
+  const [scanDone, setScanDone] = useState(false);
+
+  // Auto-scan on mount
+  useEffect(() => {
+    handleScanLan();
+  }, []);
 
   const handleSave = () => {
     setServerUrl(localUrl);
@@ -65,12 +82,26 @@ export default function SettingsScreen() {
     setTestResult(null);
   };
 
-  const handleScanLan = () => {
+  const handleScanLan = async () => {
     setScanning(true);
-    setTimeout(() => {
-      setPeers(MOCK_PEERS);
-      setScanning(false);
-    }, 1500);
+    setScanProgress('Scanning LAN…');
+    setScanDone(false);
+    try {
+      const discovered = await scanLan((found, total) => {
+        setScanProgress(`Found ${found} agent(s) — probing…`);
+      });
+      setPeers(discovered);
+      setScanDone(true);
+      if (discovered.length === 0) {
+        setScanProgress('No agents found on LAN');
+      } else {
+        setScanProgress(`Found ${discovered.length} agent(s)`);
+      }
+    } catch (e: any) {
+      setScanProgress('❌ Scan failed: ' + (e?.message || 'unknown error'));
+      setPeers([]);
+    }
+    setScanning(false);
   };
 
   const handleResetOnboarding = () => {
@@ -95,7 +126,13 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.bgPrimary} />
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.headerTitle}>Settings</Text>
+        {/* ── Header with Back Button ── */}
+        <View style={styles.headerRow}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <ArrowBack />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Settings</Text>
+        </View>
 
         {/* Connection */}
         <View style={styles.section}>
@@ -253,9 +290,18 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: 40,
   },
+  // ── Header ──
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xxl,
+  },
+  backBtn: {
+    padding: spacing.xs,
+  },
   headerTitle: {
     ...typography.h2,
-    marginBottom: spacing.xxl,
   },
   section: {
     marginBottom: spacing.xxl,

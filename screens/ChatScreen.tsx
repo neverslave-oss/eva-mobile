@@ -336,12 +336,11 @@ export default function ChatScreen() {
         <TouchableOpacity style={[styles.hdrToggle, toolsEnabled && styles.hdrToggleActive]} onPress={() => setToolsEnabled(!toolsEnabled)}>
           <Text style={[styles.hdrToggleText, toolsEnabled && styles.hdrToggleTextActive]}>{toolsEnabled ? '🛠️ Agent' : '💬 Chat'}</Text>
         </TouchableOpacity>
-        <View style={{ position: 'relative' }}>
-          <TouchableOpacity style={styles.hdrBtn} onPress={() => setMenuOpen(!menuOpen)}><ThreeDotsIcon /></TouchableOpacity>
-          {menuOpen && (
-            <>
-              <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setMenuOpen(false)} />
-              <View style={styles.dropdown}>
+        <TouchableOpacity style={styles.hdrBtn} onPress={() => setMenuOpen(!menuOpen)}><ThreeDotsIcon /></TouchableOpacity>
+        {menuOpen && (
+          <>
+            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setMenuOpen(false)} />
+            <View style={styles.dropdown}>
                 <TouchableOpacity style={styles.dropdownItem} onPress={() => handleMenuAction('new')}>
                   <Text style={styles.dropdownItemText}>➕ New conversation</Text>
                 </TouchableOpacity>
@@ -358,7 +357,6 @@ export default function ChatScreen() {
               </View>
             </>
           )}
-        </View>
       </View>
 
       {/* ═══ MESSAGES ═══ */}
@@ -542,7 +540,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgPrimary },
   flex: { flex: 1 },
   // Header
-  header: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 8, backgroundColor: colors.bgCard, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSubtle },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 8, backgroundColor: colors.bgCard, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSubtle, zIndex: 999 },
   hdrBtn: { padding: 6, alignItems: 'center', justifyContent: 'center' },
   hdrAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.gradientOnline[0], alignItems: 'center', justifyContent: 'center' },
   hdrStatusDot: { width: 8, height: 8, borderRadius: 4 },
