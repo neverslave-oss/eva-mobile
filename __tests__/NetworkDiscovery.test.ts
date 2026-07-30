@@ -116,10 +116,12 @@ describe('probeHost()', () => {
     expect(result).toBeNull();
   });
 
-  it('returns null when /health returns non-200', async () => {
+  it('returns a DiscoveredPeer when /health responds — even non-200 (CORS-proof)', async () => {
     (globalThis as any).fetch = jest.fn().mockResolvedValue({ ok: false, status: 500 } as Response);
     const result = await probeHost('192.168.1.50', 8779, 'Kernel Evolving', 'kernel-main');
-    expect(result).toBeNull();
+    // CORS-proof: any resolved fetch (even 500/opaque) means server is alive
+    expect(result).not.toBeNull();
+    expect(result!.status).toBe('online');
   });
 
   it('aborts and returns null after PROBE_TIMEOUT', async () => {

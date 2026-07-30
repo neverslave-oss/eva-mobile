@@ -72,16 +72,16 @@ export async function probeHost(ip: string, port: number, name: string, id: stri
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT);
 
-    const res = await fetch(`http://${ip}:${port}/health`, {
+    // CORS-proof: any resolved fetch means the server responded,
+    // even if CORS blocks reading the response body (opaque response).
+    await fetch(`http://${ip}:${port}/health`, {
       method: 'GET',
       signal: controller.signal as any,
     });
     clearTimeout(timer);
 
-    if (res.ok || res.status === 200) {
-      return { id, name, ip, port, status: 'online' };
-    }
-    return null;
+    // Fetch resolved = TCP connection succeeded AND server sent an HTTP response
+    return { id, name, ip, port, status: 'online' };
   } catch {
     return null;
   }
