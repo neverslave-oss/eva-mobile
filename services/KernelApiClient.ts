@@ -86,15 +86,15 @@ class KernelApiClient {
     } catch { return []; }
   }
 
-  /** Send a message to the agent via triage endpoint */
+  /** Send a message to the agent via /message endpoint */
   async triage(
     text: string,
     options?: { chatId?: string; toolsEnabled?: boolean }
   ): Promise<string> {
     try {
       const res = await this.client.post(
-        `${this.base}/agent/triage`,
-        { text, chat_id: options?.chatId, tools: options?.toolsEnabled },
+        `${this.base}/message`,
+        { message: text, chat_id: options?.chatId },
         { timeout: 120000, headers: this.authHeaders() }
       );
       return res.data?.response ?? res.data?.reply ?? res.data?.text ?? '🐬 Done.';
