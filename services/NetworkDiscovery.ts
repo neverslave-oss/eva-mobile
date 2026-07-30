@@ -35,15 +35,23 @@ const PROBE_TIMEOUT = 2000;
 
 /**
  * Get the device's local IPv4 address on the LAN.
+ * Falls back to window.location.hostname in web mode.
  */
 export async function getLocalIp(): Promise<string | null> {
   try {
     const ip = await Network.getIpAddressAsync();
-    // expo-network may return an IPv4 string; strip port if present
-    return ip?.split(':')[0] ?? null;
+    if (ip) return ip.split(':')[0];
   } catch {
-    return null;
+    // expo-network may fail in web mode
   }
+  // Web fallback: try the page hostname
+  if (typeof window !== 'undefined' && window.location) {
+    const host = window.location.hostname;
+    if (host && host !== 'localhost' && host !== '127.0.0.1' && host !== '::1') {
+      return host;
+    }
+  }
+  return null;
 }
 
 /**
@@ -79,12 +87,58 @@ export async function probeHost(ip: string, port: number, name: string, id: stri
   }
 }
 
+export type ScanProgress = {
+  type: 'quick' | 'subnet' | 'configured';
+  currentIp: string;
+  currentPort: number;
+  found: number;
+  total: number;
+  currentService: string;
+};
+
+/**
+ * Probe a single known host for all agent ports.
+ * Returns all services running on that host.
+ */
+export async function probeHostForAllPorts(
+  host: string,
+  onProgress?: (progress: ScanProgress) => void
+): Promise<DiscoveredPeer[]> {
+  const results: DiscoveredPeer[] = [];
+  for (const { port, name, id } of KNOWN_PORTS) {
+    onProgress?.({
+      type: 'configured',
+      currentIp: host,
+      currentPort: port,
+      found: results.length,
+      total: KNOWN_PORTS.length,
+      currentService: name,
+    });
+    const peer = await probeHost(host, port, name, id);
+    if (peer) results.push(peer);
+  }
+  return results;
+}
+
+/**
+ * Extract the hostname from a configured server URL.
+ * e.g. "http://192.168.1.50:8779" → "192.168.1.50"
+ */
+export function hostFromUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Scan the local /24 subnet for all known agent ports.
  * Returns discovered online peers.
  */
 export async function scanLan(
-  onProgress?: (found: number, total: number) => void
+  onProgress?: (progress: ScanProgress) => void
 ): Promise<DiscoveredPeer[]> {
   const localIp = await getLocalIp();
   if (!localIp) return [];
@@ -94,13 +148,23 @@ export async function scanLan(
   const results: DiscoveredPeer[] = [];
 
   // For each IP, probe all known ports in parallel
-  let attempted = 0;
+  let batchIpCount = 0;
   const total = ips.length * KNOWN_PORTS.length;
 
   for (let i = 0; i < ips.length; i += SCAN_CONCURRENCY) {
     const batch = ips.slice(i, i + SCAN_CONCURRENCY);
     const probes = batch.flatMap((ip) =>
-      KNOWN_PORTS.map(({ port, name, id }) => probeHost(ip, port, name, id))
+      KNOWN_PORTS.map(({ port, name, id }) => {
+        onProgress?.({
+          type: 'subnet',
+          currentIp: ip,
+          currentPort: port,
+          found: results.length,
+          total,
+          currentService: name,
+        });
+        return probeHost(ip, port, name, id);
+      })
     );
 
     const batchResults = await Promise.allSettled(probes);
@@ -110,8 +174,15 @@ export async function scanLan(
       }
     }
 
-    attempted += batch.length;
-    onProgress?.(results.length, attempted * KNOWN_PORTS.length);
+    batchIpCount += batch.length;
+    onProgress?.({
+      type: 'subnet',
+      currentIp: `${batch[0]}..${batch[batch.length - 1]}`,
+      currentPort: 0,
+      found: results.length,
+      total,
+      currentService: `Batch ${Math.ceil(batchIpCount / SCAN_CONCURRENCY)}/${Math.ceil(ips.length / SCAN_CONCURRENCY)}`,
+    });
   }
 
   return results;

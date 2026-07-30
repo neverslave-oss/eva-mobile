@@ -17,7 +17,7 @@ import { useAppStore } from '../stores/appStore';
 import { useAgentStore } from '../stores/agentStore';
 import { RootStackParamList } from '../types';
 import { colors, typography, borderRadius, spacing } from '../theme';
-import { scanLan, quickScanLocalhost, DiscoveredPeer } from '../services/NetworkDiscovery';
+import { scanLan, quickScanLocalhost, probeHostForAllPorts, hostFromUrl, DiscoveredPeer, ScanProgress } from '../services/NetworkDiscovery';
 import Svg, { Path } from 'react-native-svg';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -41,6 +41,7 @@ export default function SettingsScreen() {
   const [peers, setPeers] = useState<DiscoveredPeer[]>([]);
   const [scanProgress, setScanProgress] = useState<string | null>(null);
   const [scanDone, setScanDone] = useState(false);
+  const [scanDetail, setScanDetail] = useState<string>('');
   const feedDiscoveredPeers = useAgentStore((s) => s.feedDiscoveredPeers);
 
   // Auto-scan on mount
@@ -86,30 +87,44 @@ export default function SettingsScreen() {
 
   const handleScanLan = async () => {
     setScanning(true);
-    setScanProgress('Scanning LAN…');
     setScanDone(false);
+    setScanProgress('Scanning…');
+    setScanDetail('');
     try {
-      // Quick scan localhost first (fast — same machine)
+      // 1. Quick scan localhost first (fast — same machine, but won't work from web preview)
+      setScanProgress('🔍 Scanning localhost…');
       const local = await quickScanLocalhost();
-      if (local.length > 0) {
-        feedDiscoveredPeers(local);
-        setPeers(local);
-        setScanDone(true);
-        setScanProgress(`Found ${local.length} agent(s) locally`);
-        setScanning(false);
-        return;
+
+      // 2. Probe the configured server URL host (catches web preview case)
+      const serverHost = hostFromUrl(localUrl);
+      let allPeers = [...local];
+
+      if (serverHost && serverHost !== '127.0.0.1' && serverHost !== 'localhost') {
+        setScanProgress(`🔍 Probing ${serverHost}…`);
+        const serverPeers = await probeHostForAllPorts(serverHost, (p: ScanProgress) => {
+          setScanDetail(`${p.currentService} on ${p.currentIp}:${p.currentPort}`);
+        });
+        allPeers = [...allPeers, ...serverPeers];
       }
-      // Fallback to full subnet scan
-      const discovered = await scanLan((found, total) => {
-        setScanProgress(`Found ${found} agent(s) — probing…`);
-      });
-      feedDiscoveredPeers(discovered);
-      setPeers(discovered);
+
+      // 3. If nothing found yet, try full subnet scan
+      if (allPeers.length === 0) {
+        setScanProgress('🔍 Scanning subnet…');
+        const subnetPeers = await scanLan((p: ScanProgress) => {
+          setScanProgress(`🔍 Probing ${p.currentIp}:${p.currentPort} — ${p.currentService}`);
+          setScanDetail(`Found ${p.found} agent(s) — scanning ${p.currentIp}`);
+        });
+        allPeers = [...allPeers, ...subnetPeers];
+      }
+
+      feedDiscoveredPeers(allPeers);
+      setPeers(allPeers);
       setScanDone(true);
-      if (discovered.length === 0) {
-        setScanProgress('No agents found on LAN');
+
+      if (allPeers.length === 0) {
+        setScanProgress('No agents found');
       } else {
-        setScanProgress(`Found ${discovered.length} agent(s)`);
+        setScanProgress(`✅ Found ${allPeers.length} agent(s)`);
       }
     } catch (e: any) {
       setScanProgress('❌ Scan failed: ' + (e?.message || 'unknown error'));
@@ -236,6 +251,9 @@ export default function SettingsScreen() {
                 <Text style={styles.scanBtnText}>{scanning ? 'Scanning…' : '↻ Refresh'}</Text>
               </TouchableOpacity>
             </View>
+            {scanning && (
+              <Text style={styles.scanningDetail}>{scanDetail}</Text>
+            )}
             {peers.length > 0 ? (
               <View style={styles.peersList}>
                 {peers.map((peer, i) => (
@@ -474,6 +492,12 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
     paddingVertical: spacing.md,
+  },
+  scanningDetail: {
+    fontSize: 11,
+    color: colors.accent,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
   // Sync
   syncDesc: {

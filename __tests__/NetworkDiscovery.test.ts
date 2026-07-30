@@ -176,6 +176,14 @@ describe('scanLan()', () => {
     const onProgress = jest.fn();
     await scanLan(onProgress);
     expect(onProgress).toHaveBeenCalled();
+    // Verify progress includes ScanProgress fields
+    const call = onProgress.mock.calls[0][0];
+    expect(call).toHaveProperty('type', 'subnet');
+    expect(call).toHaveProperty('currentIp');
+    expect(call).toHaveProperty('currentPort');
+    expect(call).toHaveProperty('found');
+    expect(call).toHaveProperty('total');
+    expect(call).toHaveProperty('currentService');
   });
 });
 

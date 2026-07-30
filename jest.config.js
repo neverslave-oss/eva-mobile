@@ -13,6 +13,5 @@ module.exports = {
     }],
   },
   moduleNameMapper: {
-    '^expo-network$': '<rootDir>/__mocks__/expo-network.ts',
   },
 };
