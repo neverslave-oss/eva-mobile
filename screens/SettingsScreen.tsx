@@ -18,6 +18,7 @@ import { useAgentStore } from '../stores/agentStore';
 import { RootStackParamList } from '../types';
 import { colors, typography, borderRadius, spacing } from '../theme';
 import { scanLan, quickScanLocalhost, probeHostForAllPorts, hostFromUrl, DiscoveredPeer, ScanProgress } from '../services/NetworkDiscovery';
+import { kernelClient } from '../services/KernelApiClient';
 import Svg, { Path } from 'react-native-svg';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -29,14 +30,31 @@ const ArrowBack = () => (
   </Svg>
 );
 
+// ── Color helpers ──
+function statusColor(mode: string, connected: boolean): string {
+  if (mode === 'proxy') return connected ? colors.success : colors.textMuted;
+  return connected ? colors.success : colors.danger;
+}
+
+function statusLabel(mode: string, connected: boolean): string {
+  if (mode === 'proxy') return connected ? '● Proxy Active' : '○ Disconnected';
+  return connected ? '● Direct (local)' : '○ Disconnected';
+}
+
 export default function SettingsScreen() {
   const navigation = useNavigation<NavProp>();
-  const { mode, serverUrl, setMode, setServerUrl } = useSettingsStore();
+  const {
+    mode, serverUrl, proxyUrl, authToken, user,
+    setMode, setServerUrl, setProxyUrl, setAuthToken, setUser,
+    login, logout,
+  } = useSettingsStore();
   const { setOnboardingCompleted } = useAppStore();
   const [localUrl, setLocalUrl] = useState(serverUrl);
+  const [localProxyUrl, setLocalProxyUrl] = useState(proxyUrl);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [peers, setPeers] = useState<DiscoveredPeer[]>([]);
   const [scanProgress, setScanProgress] = useState<string | null>(null);
@@ -44,10 +62,26 @@ export default function SettingsScreen() {
   const [scanDetail, setScanDetail] = useState<string>('');
   const feedDiscoveredPeers = useAgentStore((s) => s.feedDiscoveredPeers);
 
+  // ── KM-002: Login state ──
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loggingIn, setLoggingIn] = useState(false);
+
   // Auto-scan on mount
   useEffect(() => {
     handleScanLan();
+    checkConnection();
   }, []);
+
+  // Check connection
+  const checkConnection = async () => {
+    const ok = await kernelClient.healthCheck();
+    setConnected(ok);
+  };
+
+  // ── Direct mode ──
 
   const handleSave = () => {
     setServerUrl(localUrl);
@@ -68,22 +102,88 @@ export default function SettingsScreen() {
       if (res.ok) {
         setStatusMessage('✅ Connected successfully');
         setTestResult('success');
+        setConnected(true);
       } else {
         setStatusMessage('❌ Server responded with error');
         setTestResult('error');
+        setConnected(false);
       }
     } catch (e: any) {
       setStatusMessage('❌ ' + (e?.message || 'Connection failed'));
       setTestResult('error');
+      setConnected(false);
     }
     setTesting(false);
   };
 
   const handleReset = () => {
     setLocalUrl(serverUrl);
+    setLocalProxyUrl(proxyUrl);
     setStatusMessage(null);
     setTestResult(null);
   };
+
+  // ── KM-002: Login / Account ──
+
+  const handleLogin = async () => {
+    if (!loginEmail || !loginPassword) {
+      setLoginError('Email and password are required');
+      return;
+    }
+    setLoggingIn(true);
+    setLoginError(null);
+
+    const ok = await login(loginEmail, loginPassword);
+    if (ok) {
+      setLoginEmail('');
+      setLoginPassword('');
+      setShowLogin(false);
+      setLoginError(null);
+      // After login, check proxy connection
+      setStatusMessage('✅ Logged in. Checking connection…');
+      setTesting(true);
+      const healthOk = await kernelClient.healthCheck();
+      setConnected(healthOk);
+      setStatusMessage(healthOk ? '✅ Proxy connected' : '❌ Proxy unreachable');
+      setTesting(false);
+    } else {
+      setLoginError('Login failed. Check credentials and proxy URL.');
+    }
+    setLoggingIn(false);
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Log out from kernel-central? The device will stop using proxy mode.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: () => {
+            logout();
+            setConnected(false);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleModeChange = (newMode: 'direct' | 'proxy') => {
+    setMode(newMode);
+    // Reset UI state for the new mode
+    setStatusMessage(null);
+    setTestResult(null);
+    // Save proxy URL when switching to proxy
+    if (newMode === 'proxy') {
+      setProxyUrl(localProxyUrl);
+    }
+    // Re-check connection
+    setTimeout(() => checkConnection(), 500);
+  };
+
+  // ── LAN scan ──
 
   const handleScanLan = async () => {
     setScanning(true);
@@ -91,11 +191,9 @@ export default function SettingsScreen() {
     setScanProgress('Scanning…');
     setScanDetail('');
     try {
-      // 1. Quick scan localhost first (fast — same machine, but won't work from web preview)
       setScanProgress('🔍 Scanning localhost…');
       const local = await quickScanLocalhost();
 
-      // 2. Probe the configured server URL host (catches web preview case)
       const serverHost = hostFromUrl(localUrl);
       let allPeers = [...local];
 
@@ -107,7 +205,6 @@ export default function SettingsScreen() {
         allPeers = [...allPeers, ...serverPeers];
       }
 
-      // 3. If nothing found yet, try full subnet scan
       if (allPeers.length === 0) {
         setScanProgress('🔍 Scanning subnet…');
         const subnetPeers = await scanLan((p: ScanProgress) => {
@@ -163,23 +260,24 @@ export default function SettingsScreen() {
           <Text style={styles.headerTitle}>Settings</Text>
         </View>
 
-        {/* Connection */}
+        {/* ════════════════════════════════════════════════
+           KM-003: Connection Mode Toggle
+           ════════════════════════════════════════════════ */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>CONNECTION</Text>
+          <Text style={styles.sectionLabel}>CONNECTION MODE</Text>
           <View style={styles.card}>
-            {/* Mode toggle — v1 styled */}
             <View style={styles.toggleRow}>
               <TouchableOpacity
                 style={[styles.toggleBtn, mode === 'direct' && styles.toggleActive]}
-                onPress={() => { setMode('direct'); handleReset(); }}
+                onPress={() => handleModeChange('direct')}
               >
                 <Text style={[styles.toggleText, mode === 'direct' && styles.toggleTextActive]}>
-                  🏠 Direct (local)
+                  🏠 Direct (LAN)
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.toggleBtn, mode === 'proxy' && styles.toggleActive]}
-                onPress={() => { setMode('proxy'); handleReset(); }}
+                onPress={() => handleModeChange('proxy')}
               >
                 <Text style={[styles.toggleText, mode === 'proxy' && styles.toggleTextActive]}>
                   ☁️ Proxy (remote)
@@ -187,35 +285,136 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Server URL */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>SERVER URL</Text>
-              <TextInput
-                style={styles.input}
-                value={localUrl}
-                onChangeText={setLocalUrl}
-                placeholder="http://localhost:8779"
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
-
-            {/* Apply & Test + Reset buttons — v1 style */}
-            <View style={styles.buttonRow}>
-              <TouchableOpacity style={styles.applyBtn} onPress={handleApplyTest} disabled={testing}>
-                <Text style={styles.applyBtnText}>
-                  {testing ? 'Testing…' : 'Apply & Test'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.resetBtn} onPress={handleReset}>
-                <Text style={styles.resetBtnText}>Reset</Text>
-              </TouchableOpacity>
+            {/* Connection status indicator (KM-003) */}
+            <View style={styles.statusRow}>
+              <View style={[styles.dot, { backgroundColor: statusColor(mode, connected) }]} />
+              <Text style={styles.statusLabel}>{statusLabel(mode, connected)}</Text>
             </View>
           </View>
         </View>
 
-        {/* Connection Status — v1's "Status" section */}
+        {/* ════════════════════════════════════════════════
+           KM-001: Server URL & Connection Settings
+           ════════════════════════════════════════════════ */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>
+            {mode === 'direct' ? 'DIRECT (LOCAL) CONNECTION' : 'PROXY CONNECTION'}
+          </Text>
+          <View style={styles.card}>
+            {/* Show different fields based on mode */}
+            {mode === 'direct' ? (
+              <>
+                {/* Server URL — direct mode */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>KERNEL-EVOLVING URL</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={localUrl}
+                    onChangeText={setLocalUrl}
+                    placeholder="http://localhost:8779"
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+
+                {/* Apply & Test + Reset */}
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity style={styles.applyBtn} onPress={handleApplyTest} disabled={testing}>
+                    <Text style={styles.applyBtnText}>
+                      {testing ? 'Testing…' : 'Apply & Test'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.resetBtn} onPress={handleReset}>
+                    <Text style={styles.resetBtnText}>Reset</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                {/* Proxy URL — proxy mode */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>KERNEL-CENTRAL URL</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={localProxyUrl}
+                    onChangeText={(t) => { setLocalProxyUrl(t); setProxyUrl(t); }}
+                    placeholder="https://kernel-central.neverslave.dev"
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+
+                {/* Login/Account section (KM-002) */}
+                {user ? (
+                  <View style={styles.accountInfo}>
+                    <View style={styles.userRow}>
+                      <Text style={styles.userIcon}>👤</Text>
+                      <View style={styles.userDetails}>
+                        <Text style={styles.userName}>{user.name}</Text>
+                        <Text style={styles.userEmail}>{user.email}</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+                      <Text style={styles.logoutBtnText}>Logout</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : showLogin ? (
+                  <View style={styles.loginForm}>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>EMAIL</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={loginEmail}
+                        onChangeText={setLoginEmail}
+                        placeholder="email@example.com"
+                        placeholderTextColor={colors.textMuted}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="email-address"
+                      />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>PASSWORD</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={loginPassword}
+                        onChangeText={setLoginPassword}
+                        placeholder="••••••••"
+                        placeholderTextColor={colors.textMuted}
+                        secureTextEntry
+                      />
+                    </View>
+                    {loginError && (
+                      <Text style={styles.loginError}>{loginError}</Text>
+                    )}
+                    <View style={styles.buttonRow}>
+                      <TouchableOpacity
+                        style={styles.applyBtn}
+                        onPress={handleLogin}
+                        disabled={loggingIn}
+                      >
+                        <Text style={styles.applyBtnText}>
+                          {loggingIn ? 'Logging in…' : 'Login'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.resetBtn} onPress={() => setShowLogin(false)}>
+                        <Text style={styles.resetBtnText}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={styles.loginBtn} onPress={() => setShowLogin(true)}>
+                    <Text style={styles.loginBtnText}>🔑 Login to kernel-central</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
+        </View>
+
+        {/* ── Connection Status ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>STATUS</Text>
           <View style={styles.card}>
@@ -233,13 +432,15 @@ export default function SettingsScreen() {
             ) : (
               <View style={styles.statusContent}>
                 <View style={styles.spinner} />
-                <Text style={styles.statusWaiting}>Not tested yet</Text>
+                <Text style={styles.statusWaiting}>
+                  {mode === 'direct' ? 'Not tested yet. Apply & Test to verify.' : user ? 'Logged in. Check connection.' : 'Login to use proxy mode.'}
+                </Text>
               </View>
             )}
           </View>
         </View>
 
-        {/* LAN Discovery — v1 section */}
+        {/* ── LAN Discovery ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>LAN DISCOVERY</Text>
           <View style={styles.card}>
@@ -270,23 +471,7 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Sync with Desktop — v1 section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>SYNC WITH DESKTOP</Text>
-          <View style={styles.card}>
-            <Text style={styles.syncDesc}>
-              Connect to the desktop app running on the same network to sync conversations and settings.
-            </Text>
-            <View style={styles.syncRow}>
-              <Text style={styles.syncState}>Auto-discovery: {peers.length > 0 ? 'On' : 'Off'}</Text>
-              <TouchableOpacity style={styles.syncBtn} onPress={handleScanLan}>
-                <Text style={styles.syncBtnText}>Scan LAN</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {/* About */}
+        {/* ── About ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>ABOUT</Text>
           <View style={styles.card}>
@@ -301,7 +486,7 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Advanced - Reset */}
+        {/* ── Advanced ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>ADVANCED</Text>
           <TouchableOpacity style={styles.dangerBtn} onPress={handleResetOnboarding}>
@@ -347,7 +532,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     padding: spacing.md,
   },
-  // Toggle
+  // Toggle (KM-003)
   toggleRow: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -370,6 +555,22 @@ const styles = StyleSheet.create({
   },
   toggleTextActive: {
     color: '#fff',
+  },
+  // Status indicator (KM-003)
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  statusLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   // Input
   inputGroup: {
@@ -439,6 +640,64 @@ const styles = StyleSheet.create({
     borderTopColor: 'transparent',
     borderRadius: 8,
   },
+  // KM-002: Login / Account
+  accountInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.bgHover,
+    borderRadius: borderRadius.md,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  userIcon: {
+    fontSize: 20,
+  },
+  userDetails: {},
+  userName: {
+    fontSize: 13,
+    color: colors.textPrimary,
+    fontWeight: '600',
+  },
+  userEmail: {
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  logoutBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    backgroundColor: colors.accentBg,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  logoutBtnText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.danger,
+  },
+  loginForm: {},
+  loginError: {
+    fontSize: 12,
+    color: colors.danger,
+    marginBottom: spacing.sm,
+  },
+  loginBtn: {
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.buttonPrimary,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+  },
+  loginBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+  },
   // LAN Discovery
   discoveryHeader: {
     flexDirection: 'row',
@@ -498,32 +757,6 @@ const styles = StyleSheet.create({
     color: colors.accent,
     textAlign: 'center',
     marginBottom: spacing.sm,
-  },
-  // Sync
-  syncDesc: {
-    ...typography.caption,
-    lineHeight: 18,
-    marginBottom: spacing.md,
-  },
-  syncRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  syncState: {
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-  syncBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-    backgroundColor: colors.accentBg,
-    borderRadius: borderRadius.full,
-  },
-  syncBtnText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: colors.accent,
   },
   // About
   aboutRow: {
