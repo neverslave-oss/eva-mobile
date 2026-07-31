@@ -33,6 +33,18 @@ interface MessageRow {
   timestamp: number;
 }
 
+/** Cached agent row — mirrors DiscoveredPeer + Agent for offline read-only. */
+export interface AgentRow {
+  id: string;        // unique agent id (e.g. 'kernel-main')
+  name: string;
+  description: string;
+  ip: string;        // last-known host (empty for proxy-only agents)
+  port: number;      // last-known port
+  status: string;     // 'online' | 'offline' | 'checking'
+  source: string;    // 'lan' | 'proxy' | 'manual'
+  updated_at: number; // last refresh timestamp
+}
+
 class SqlitePersistence {
   private initialized = false;
 
@@ -92,6 +104,20 @@ class SqlitePersistence {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS agents (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        ip TEXT NOT NULL DEFAULT '',
+        port INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'offline',
+        source TEXT NOT NULL DEFAULT 'lan',
+        updated_at INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_agents_source
+        ON agents(source);
     `);
   }
 
@@ -194,6 +220,77 @@ class SqlitePersistence {
   async deleteSetting(key: string): Promise<void> {
     const database = await getDb();
     await database.runAsync(`DELETE FROM app_settings WHERE key = ?`, key);
+  }
+
+  // ─── Agents (offline cache) ───
+
+  /** Load all cached agents (offline read-only mode). */
+  async getAgents(): Promise<AgentRow[]> {
+    const database = await getDb();
+    return database.getAllAsync<AgentRow>(
+      `SELECT * FROM agents ORDER BY updated_at DESC`
+    );
+  }
+
+  /** Upsert a single agent into the cache. */
+  async saveAgent(agent: AgentRow): Promise<void> {
+    const database = await getDb();
+    await database.runAsync(
+      `INSERT OR REPLACE INTO agents
+         (id, name, description, ip, port, status, source, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      agent.id,
+      agent.name,
+      agent.description,
+      agent.ip,
+      agent.port,
+      agent.status,
+      agent.source,
+      agent.updated_at
+    );
+  }
+
+  /** Upsert many agents in one go (used after a LAN/proxy scan). */
+  async saveAgents(agents: AgentRow[]): Promise<void> {
+    const database = await getDb();
+    for (const a of agents) {
+      await database.runAsync(
+        `INSERT OR REPLACE INTO agents
+           (id, name, description, ip, port, status, source, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        a.id,
+        a.name,
+        a.description,
+        a.ip,
+        a.port,
+        a.status,
+        a.source,
+        a.updated_at
+      );
+    }
+  }
+
+  /** Mark a cached agent's status (e.g. online → offline when unreachable). */
+  async setAgentStatus(id: string, status: string): Promise<void> {
+    const database = await getDb();
+    await database.runAsync(
+      `UPDATE agents SET status = ?, updated_at = ? WHERE id = ?`,
+      status,
+      Date.now(),
+      id
+    );
+  }
+
+  /** Remove a cached agent by id. */
+  async deleteAgent(id: string): Promise<void> {
+    const database = await getDb();
+    await database.runAsync(`DELETE FROM agents WHERE id = ?`, id);
+  }
+
+  /** Clear all cached agents (e.g. on logout / mode switch). */
+  async clearAgents(): Promise<void> {
+    const database = await getDb();
+    await database.runAsync(`DELETE FROM agents`);
   }
 }
 

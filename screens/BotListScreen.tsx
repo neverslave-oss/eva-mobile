@@ -11,9 +11,11 @@ import {
 } from 'react-native';
 import { SCREEN_NAMES, Agent, RootStackParamList } from '../types';
 import { useAgentStore } from '../stores/agentStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, typography, borderRadius, spacing } from '../theme';
+import { quickScanLocalhost, probeHostForAllPorts, hostFromUrl, dedupePeers, DiscoveredPeer } from '../services/NetworkDiscovery';
 import Svg, { Path, Ellipse, Circle } from 'react-native-svg';
 
 const STATUS_COLORS: Record<Agent['status'], string> = {
@@ -51,19 +53,72 @@ const SnakeEMini = ({ size = 24 }: { size?: number }) => (
 
 export default function BotListScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { agents, selectedAgentId, selectAgent, fetchAgents } = useAgentStore();
+  const { agents, selectedAgentId, selectAgent, fetchAgents, feedDiscoveredPeers, loadCachedAgents } = useAgentStore();
+  const { mode, serverUrl } = useSettingsStore();
   const [refreshing, setRefreshing] = React.useState(false);
 
-  // Fetch real agents from kernel-evolving on mount
+  // On mount: load cached agents first (instant offline read-only display),
+  // then fetch live agents from the API/proxy, then run LAN discovery.
   React.useEffect(() => {
-    fetchAgents();
+    let cancelled = false;
+
+    (async () => {
+      // 1. Cached agents from SQLite — instant, works offline.
+      await loadCachedAgents();
+
+      // 2. Live fetch from API (direct) or relay (proxy).
+      //    In web preview this may fail with CORS — that's fine, the cache
+      //    and LAN discovery below still populate the list.
+      await fetchAgents();
+
+      if (cancelled) return;
+
+      // 3. LAN discovery — finds agents on the local network even when the
+      //    API endpoint is CORS-blocked (web preview) or unreachable.
+      //    Proxy mode skips LAN scan (discovery is via the relay).
+      if (mode !== 'proxy') {
+        try {
+          const local = await quickScanLocalhost();
+          let allPeers = [...local];
+
+          const serverHost = hostFromUrl(serverUrl);
+          if (serverHost && serverHost !== '127.0.0.1' && serverHost !== 'localhost') {
+            const serverPeers = await probeHostForAllPorts(serverHost);
+            allPeers = [...allPeers, ...serverPeers];
+          }
+
+          allPeers = dedupePeers(allPeers);
+          if (allPeers.length > 0 && !cancelled) {
+            feedDiscoveredPeers(allPeers);
+          }
+        } catch {
+          // Discovery is best-effort — don't break the screen.
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
+    await loadCachedAgents();
     await fetchAgents();
+    if (mode !== 'proxy') {
+      try {
+        const local = await quickScanLocalhost();
+        const serverHost = hostFromUrl(serverUrl);
+        let allPeers = [...local];
+        if (serverHost && serverHost !== '127.0.0.1' && serverHost !== 'localhost') {
+          const serverPeers = await probeHostForAllPorts(serverHost);
+          allPeers = [...allPeers, ...serverPeers];
+        }
+        allPeers = dedupePeers(allPeers);
+        if (allPeers.length > 0) feedDiscoveredPeers(allPeers);
+      } catch { /* best-effort */ }
+    }
     setRefreshing(false);
-  }, [fetchAgents]);
+  }, [fetchAgents, feedDiscoveredPeers, loadCachedAgents, mode, serverUrl]);
 
   const handleAgentPress = (agent: Agent) => {
     selectAgent(agent.id);
