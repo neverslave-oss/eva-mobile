@@ -52,12 +52,16 @@ export default function OnboardingScreen({ navigation }: OnboardingScreenProps) 
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch(`${localUrl}/health`, { method: 'GET', signal: AbortSignal.timeout(5000) });
-      if (res.ok) {
-        setTestResult('✅ Connected!');
-      } else {
-        setTestResult('❌ Server responded with error');
-      }
+      // Use no-cors so this works in web preview (origin localhost:8081)
+      // where the agent sends no CORS headers. An opaque response means alive.
+      await fetch(`${localUrl}/health`, {
+        method: 'GET',
+        mode: 'no-cors',
+        signal: AbortSignal.timeout(5000),
+      });
+      // In no-cors mode the response is opaque (status 0) — any resolved
+      // fetch means the server is reachable. A rejection means unreachable.
+      setTestResult('✅ Connected!');
     } catch (e: any) {
       setTestResult('❌ ' + (e?.message || 'Connection failed'));
     }

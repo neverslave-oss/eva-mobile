@@ -232,13 +232,20 @@ class KernelApiClient {
     if (this.mode === 'proxy') {
       return this.relayHealthCheck();
     }
+    // Direct mode: use fetch with mode:'no-cors' so this works in web preview
+    // (origin localhost:8081) where the agent sends no CORS headers. axios
+    // cannot do no-cors, so we use raw fetch here. An opaque response (any
+    // resolved fetch) means the server is alive.
     try {
-      const res = await this.client.get(`${this.base}/health`, {
-        timeout: 5000,
-        headers: this.authHeaders(),
+      await fetch(`${this.base}/health`, {
+        method: 'GET',
+        mode: 'no-cors',
+        signal: AbortSignal.timeout(5000),
       });
-      return res.status === 200;
-    } catch { return false; }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async getSystemStatus(): Promise<SystemStatus | null> {
