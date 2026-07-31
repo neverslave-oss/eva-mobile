@@ -15,7 +15,7 @@ jest.mock('expo-network', () => {
 });
 
 import { getIpAddressAsync } from 'expo-network';
-import { getLocalIp, probeHost, scanLan, quickScanLocalhost } from '../services/NetworkDiscovery';
+import { getLocalIp, probeHost, scanLan, quickScanLocalhost, isPrivateIp, dedupePeers } from '../services/NetworkDiscovery';
 
 // Helper to set mock IP from the test
 const setMockIp = (ip: string | null) => {
@@ -62,6 +62,61 @@ function mockFetchPartial(healthyMap: Map<string, boolean>) {
   });
 }
 
+// ── isPrivateIp ─────────────────────────────────────────────────────────────
+
+describe('isPrivateIp()', () => {
+  it('accepts loopback', () => {
+    expect(isPrivateIp('127.0.0.1')).toBe(true);
+    expect(isPrivateIp('localhost')).toBe(true);
+  });
+  it('accepts 10.x', () => {
+    expect(isPrivateIp('10.0.0.5')).toBe(true);
+  });
+  it('accepts 172.16-31.x', () => {
+    expect(isPrivateIp('172.16.0.1')).toBe(true);
+    expect(isPrivateIp('172.31.255.255')).toBe(true);
+  });
+  it('rejects 172.32.x (public)', () => {
+    expect(isPrivateIp('172.32.0.1')).toBe(false);
+  });
+  it('accepts 192.168.x', () => {
+    expect(isPrivateIp('192.168.1.100')).toBe(true);
+  });
+  it('accepts 169.254.x link-local', () => {
+    expect(isPrivateIp('169.254.1.1')).toBe(true);
+  });
+  it('rejects public 169.155.x (the WAN IP seen in web preview)', () => {
+    expect(isPrivateIp('169.155.232.90')).toBe(false);
+  });
+  it('rejects empty / invalid', () => {
+    expect(isPrivateIp('')).toBe(false);
+    expect(isPrivateIp('not-an-ip')).toBe(false);
+  });
+});
+
+// ── dedupePeers ─────────────────────────────────────────────────────────────
+
+describe('dedupePeers()', () => {
+  it('removes duplicates by ip:port, keeping the last', () => {
+    const peers = [
+      { id: 'a', name: 'A', ip: '127.0.0.1', port: 8779, status: 'online' as const },
+      { id: 'b', name: 'B', ip: '192.168.1.5', port: 8779, status: 'online' as const },
+      { id: 'a2', name: 'A (dup)', ip: '127.0.0.1', port: 8779, status: 'online' as const },
+    ];
+    const out = dedupePeers(peers);
+    expect(out.length).toBe(2);
+    const dup = out.find((p) => p.ip === '127.0.0.1' && p.port === 8779);
+    expect(dup?.name).toBe('A (dup)');
+  });
+  it('passes through unique peers', () => {
+    const peers = [
+      { id: 'a', name: 'A', ip: '127.0.0.1', port: 8779, status: 'online' as const },
+      { id: 'b', name: 'B', ip: '127.0.0.1', port: 18789, status: 'online' as const },
+    ];
+    expect(dedupePeers(peers).length).toBe(2);
+  });
+});
+
 // ── getLocalIp ──────────────────────────────────────────────────────────────
 
 describe('getLocalIp()', () => {
@@ -69,7 +124,7 @@ describe('getLocalIp()', () => {
     setMockIp('192.168.1.100');
   });
 
-  it('returns the mocked LAN IP', async () => {
+  it('returns the mocked private LAN IP', async () => {
     const ip = await getLocalIp();
     expect(ip).toBe('192.168.1.100');
   });
@@ -82,6 +137,12 @@ describe('getLocalIp()', () => {
 
   it('returns null when expo-network fails', async () => {
     setMockIp(null);
+    const ip = await getLocalIp();
+    expect(ip).toBeNull();
+  });
+
+  it('rejects a public IP from expo-network (never scan public ranges)', async () => {
+    setMockIp('169.155.232.90');
     const ip = await getLocalIp();
     expect(ip).toBeNull();
   });
@@ -116,12 +177,21 @@ describe('probeHost()', () => {
     expect(result).toBeNull();
   });
 
-  it('returns a DiscoveredPeer when /health responds — even non-200 (CORS-proof)', async () => {
-    (globalThis as any).fetch = jest.fn().mockResolvedValue({ ok: false, status: 500 } as Response);
+  it('returns a DiscoveredPeer when /health resolves (opaque no-cors response)', async () => {
+    // mode:'no-cors' resolves with an opaque response (status 0, ok false)
+    // when the server is alive — even without CORS headers.
+    (globalThis as any).fetch = jest.fn().mockResolvedValue({ ok: false, status: 0, type: 'opaque' } as Response);
     const result = await probeHost('192.168.1.50', 8779, 'Kernel Evolving', 'kernel-main');
-    // CORS-proof: any resolved fetch (even 500/opaque) means server is alive
     expect(result).not.toBeNull();
     expect(result!.status).toBe('online');
+  });
+
+  it('returns null when fetch is rejected (CORS-blocked without no-cors, or unreachable)', async () => {
+    // A real CORS rejection (no no-cors) throws — probeHost must treat that
+    // as unreachable. (With no-cors set, alive servers resolve instead.)
+    mockFetchUnreachable();
+    const result = await probeHost('192.168.1.99', 8779, 'Kernel Evolving', 'kernel-main');
+    expect(result).toBeNull();
   });
 
   it('aborts and returns null after PROBE_TIMEOUT', async () => {

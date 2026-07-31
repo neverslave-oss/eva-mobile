@@ -17,7 +17,7 @@ import { useAppStore } from '../stores/appStore';
 import { useAgentStore } from '../stores/agentStore';
 import { RootStackParamList } from '../types';
 import { colors, typography, borderRadius, spacing } from '../theme';
-import { scanLan, quickScanLocalhost, probeHostForAllPorts, hostFromUrl, DiscoveredPeer, ScanProgress } from '../services/NetworkDiscovery';
+import { scanLan, quickScanLocalhost, probeHostForAllPorts, hostFromUrl, dedupePeers, DiscoveredPeer, ScanProgress } from '../services/NetworkDiscovery';
 import { kernelClient } from '../services/KernelApiClient';
 import Svg, { Path } from 'react-native-svg';
 
@@ -95,19 +95,18 @@ export default function SettingsScreen() {
     setStatusMessage('Testing connection…');
     setTestResult(null);
     try {
-      const res = await fetch(`${localUrl}/health`, {
+      // Use no-cors so this works in web preview (origin localhost:8081)
+      // where the agent sends no CORS headers. An opaque response means alive.
+      await fetch(`${localUrl}/health`, {
         method: 'GET',
+        mode: 'no-cors',
         signal: AbortSignal.timeout(5000),
       });
-      if (res.ok) {
-        setStatusMessage('✅ Connected successfully');
-        setTestResult('success');
-        setConnected(true);
-      } else {
-        setStatusMessage('❌ Server responded with error');
-        setTestResult('error');
-        setConnected(false);
-      }
+      // In no-cors mode res.ok is false and status is 0 (opaque) — treat any
+      // resolved fetch as success. A rejection (catch) means unreachable.
+      setStatusMessage('✅ Connected successfully');
+      setTestResult('success');
+      setConnected(true);
     } catch (e: any) {
       setStatusMessage('❌ ' + (e?.message || 'Connection failed'));
       setTestResult('error');
@@ -191,9 +190,25 @@ export default function SettingsScreen() {
     setScanProgress('Scanning…');
     setScanDetail('');
     try {
+      // Proxy mode: no LAN scan — discovery is delegated to the relay.
+      // The BotList already fetches agents via kernelClient.listAgents(),
+      // which routes through the proxy in proxy mode. Show a hint instead.
+      if (mode === 'proxy') {
+        setScanProgress('☁️ Proxy mode — LAN scan disabled');
+        setScanDetail('Agents are listed via kernel-central relay.');
+        setPeers([]);
+        setScanDone(true);
+        return;
+      }
+
+      // 1. Quick scan localhost first (fast — catches same-machine agents
+      //    in web preview and on-device localhost services).
       setScanProgress('🔍 Scanning localhost…');
       const local = await quickScanLocalhost();
 
+      // 2. Probe the configured server URL host (catches the web-preview
+      //    case where the app is served from localhost:8081 but the agent
+      //    runs on a different LAN IP the user typed in).
       const serverHost = hostFromUrl(localUrl);
       let allPeers = [...local];
 
@@ -205,6 +220,7 @@ export default function SettingsScreen() {
         allPeers = [...allPeers, ...serverPeers];
       }
 
+      // 3. If nothing found yet, try full subnet scan (direct mode on device).
       if (allPeers.length === 0) {
         setScanProgress('🔍 Scanning subnet…');
         const subnetPeers = await scanLan((p: ScanProgress) => {
@@ -213,6 +229,10 @@ export default function SettingsScreen() {
         });
         allPeers = [...allPeers, ...subnetPeers];
       }
+
+      // Dedupe by ip:port across all stages (localhost + serverHost + subnet
+      // can all find the same agent).
+      allPeers = dedupePeers(allPeers);
 
       feedDiscoveredPeers(allPeers);
       setPeers(allPeers);
