@@ -1,8 +1,17 @@
 /**
- * KernelApiClient — Real API client for kernel-evolving agent (http://localhost:8779)
+ * KernelApiClient — Dual-mode API client for kernel-evolving agent
  *
- * Mirrors endpoints used by telegram_bot.py and evolution_dashboard.html.
- * Dual-mode: direct LAN + proxy (kernel-central).
+ * DUAL MODE (KM-001):
+ *   - direct: Talks to kernel-evolving at localhost:8779 (LAN, default)
+ *   - proxy:  Routes all calls through kernel-central's message relay API,
+ *             which forwards to kernel-desktop's WS tunnel → kernel-evolving
+ *
+ * AUTH (KM-002):
+ *   - direct: No auth needed (local network)
+ *   - proxy:  Bearer token from Sanctum (kernel-central login)
+ *             Automatically routed via authHeaders()
+ *
+ * MODE TOGGLE (KM-003): Managed by settingsStore, reflected via cfg.mode
  */
 import axios, { AxiosInstance } from 'axios';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -31,10 +40,32 @@ class KernelApiClient {
     return useSettingsStore.getState();
   }
 
+  private get mode(): 'direct' | 'proxy' {
+    return this.cfg.mode;
+  }
+
+  /**
+   * Base URL depends on current connection mode.
+   *   direct: kernel-evolving localhost:8779
+   *   proxy:  kernel-central API base
+   */
   private get base(): string {
-    return this.cfg.mode === 'proxy'
-      ? this.cfg.proxyUrl || 'https://kernel-central/api/v1'
-      : this.cfg.serverUrl || 'http://localhost:8779';
+    const store = useSettingsStore.getState();
+    if (store.mode === 'proxy') {
+      // Proxy mode: route through kernel-central's relay
+      // base is the KC API root — relay endpoints are at /api/messages/relay
+      return store.proxyUrl.replace(/\/api\/v1\/?$/, '/api');
+    }
+    return store.serverUrl || 'http://localhost:8779';
+  }
+
+  /**
+   * Proxy base (without /api suffix) for auth and user endpoints.
+   */
+  private get proxyBase(): string {
+    const store = useSettingsStore.getState();
+    const url = store.proxyUrl || 'https://kernel-central.neverslave.dev';
+    return url.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '');
   }
 
   private authHeaders(): Record<string, string> {
@@ -42,9 +73,165 @@ class KernelApiClient {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  // ── Health & Status ──────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════
+  //  KM-001: Proxy Message Relay
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Send a message via proxy mode — routes through kernel-central's
+   * message relay API (KC-004).
+   *
+   * POST /api/messages/relay → KC → Reverb WS → kernel-desktop tunnel
+   * → kernel-evolving → response back → KC → mobile
+   */
+  async relayMessage(text: string): Promise<string> {
+    try {
+      const res = await this.client.post(
+        `${this.base}/messages/relay`,
+        { message: text },
+        {
+          timeout: 120000,
+          headers: this.authHeaders(),
+        }
+      );
+      return res.data?.data?.response ?? res.data?.response ?? '🐬 Done.';
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || 'Relay error';
+      return `🐬 Error: ${msg}`;
+    }
+  }
+
+  /**
+   * Stream a message via proxy — uses kernel-central's relay API
+   * with SSE-like polling for response chunks.
+   */
+  streamRelayMessage(
+    text: string,
+    callbacks: StreamCallbacks,
+    options?: { chatId?: string }
+  ): AbortController {
+    const controller = new AbortController();
+    const url = `${this.base}/messages/relay/stream?text=${encodeURIComponent(text)}${
+      options?.chatId ? `&chat_id=${options.chatId}` : ''
+    }`;
+
+    const opts: Record<string, any> = {
+      method: 'GET',
+      signal: controller.signal,
+    };
+    const headers = this.authHeaders();
+    if (Object.keys(headers).length) opts.headers = headers;
+
+    fetch(url, opts)
+      .then(async (response) => {
+        if (!response.ok || !response.body) {
+          callbacks.onError(new Error(`HTTP ${response.status}`));
+          return;
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') { callbacks.onDone(); return; }
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.event === 'token' || parsed.text) {
+                  callbacks.onToken(parsed.text ?? '');
+                }
+              } catch { callbacks.onToken(data); }
+            }
+          }
+        }
+        callbacks.onDone();
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') callbacks.onError(err);
+      });
+
+    return controller;
+  }
+
+  /**
+   * Health check via proxy mode — goes to KC health endpoint,
+   * not the agent directly.
+   */
+  async relayHealthCheck(): Promise<boolean> {
+    try {
+      const res = await this.client.get(`${this.base}/health`, {
+        timeout: 5000,
+        headers: this.authHeaders(),
+      });
+      return res.status === 200;
+    } catch { return false; }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  KM-002: Sanctum Auth — login / token management
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Login to kernel-central and obtain a Sanctum token.
+   * Uses the settingsStore.login() which calls POST /api/tokens.
+   *
+   * Returns true if login succeeded and token was stored.
+   */
+  async login(email: string, password: string): Promise<boolean> {
+    return useSettingsStore.getState().login(email, password);
+  }
+
+  /**
+   * Logout — clear token and user info from store.
+   */
+  logout(): void {
+    useSettingsStore.getState().logout();
+  }
+
+  /**
+   * Check if currently authenticated in proxy mode.
+   */
+  isAuthenticated(): boolean {
+    return !!this.cfg.authToken;
+  }
+
+  /**
+   * Fetch current user info from kernel-central.
+   */
+  async fetchCurrentUser(): Promise<{ id: number; name: string; email: string } | null> {
+    try {
+      const res = await this.client.get(`${this.proxyBase}/api/user`, {
+        timeout: 5000,
+        headers: this.authHeaders(),
+      });
+      if (res.status === 200 && res.data) {
+        return {
+          id: res.data.id,
+          name: res.data.name,
+          email: res.data.email,
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  Core endpoints (shared, mode-aware)
+  // ═══════════════════════════════════════════════════════════════════
 
   async healthCheck(): Promise<boolean> {
+    if (this.mode === 'proxy') {
+      return this.relayHealthCheck();
+    }
     try {
       const res = await this.client.get(`${this.base}/health`, {
         timeout: 5000,
@@ -86,11 +273,15 @@ class KernelApiClient {
     } catch { return []; }
   }
 
-  /** Send a message to the agent via /message endpoint */
+  /** Send a message — routes via relay in proxy mode (KM-001) */
   async triage(
     text: string,
     options?: { chatId?: string; toolsEnabled?: boolean }
   ): Promise<string> {
+    if (this.mode === 'proxy') {
+      return this.relayMessage(text);
+    }
+
     try {
       const res = await this.client.post(
         `${this.base}/message`,
@@ -311,7 +502,6 @@ class KernelApiClient {
   /** Clone voice via olly-voice-server (local) */
   async cloneVoice(text: string, samplePath?: string): Promise<string | null> {
     try {
-      // First try local olly-voice-server
       const formData = new FormData();
       formData.append('text', text);
       formData.append('model', '1.7');
@@ -322,7 +512,6 @@ class KernelApiClient {
         responseType: 'arraybuffer',
       });
       if (res.status === 200 && res.data?.byteLength > 1000) {
-        // Return URL for playback (file written to temp dir)
         return res.data;
       }
       return null;
@@ -381,6 +570,10 @@ class KernelApiClient {
     callbacks: StreamCallbacks,
     options?: { chatId?: string; toolsEnabled?: boolean }
   ): AbortController {
+    if (this.mode === 'proxy') {
+      return this.streamRelayMessage(text, callbacks, options);
+    }
+
     const controller = new AbortController();
     const url = `${this.base}/message/stream?text=${encodeURIComponent(text)}${
       options?.chatId ? `&chat_id=${options.chatId}` : ''
