@@ -9,6 +9,7 @@ import type {
   DiscoveredPeer,
 } from '../types';
 import { kernelClient } from '../services/KernelApiClient';
+import { sqlitePersistence } from '../services/SqlitePersistence';
 
 interface AgentState {
   agents: Agent[];
@@ -37,6 +38,7 @@ interface AgentState {
   setAgents: (agents: Agent[]) => void;
   addAgent: (agent: Agent) => void;
   feedDiscoveredPeers: (peers: DiscoveredPeer[]) => void;
+  loadCachedAgents: () => Promise<void>;
   updateAgentStatus: (id: string, status: Agent['status']) => void;
   selectAgent: (id: string | null) => void;
   setMessages: (messages: Message[]) => void;
@@ -84,8 +86,46 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           status: p.status === 'online' ? 'online' as const : 'checking' as const,
         }));
       if (newAgents.length === 0) return state;
+
+      // Persist all discovered peers to SQLite for offline read-only mode.
+      // Fire-and-forget — persistence must not block the UI.
+      const now = Date.now();
+      sqlitePersistence
+        .saveAgents(
+          peers.map((p) => ({
+            id: p.id,
+            name: p.name,
+            description: `🌐 LAN · ${p.ip}:${p.port}`,
+            ip: p.ip,
+            port: p.port,
+            status: p.status,
+            source: 'lan',
+            updated_at: now,
+          }))
+        )
+        .catch(() => { /* offline cache is best-effort */ });
+
       return { agents: [...state.agents, ...newAgents] };
     }),
+  loadCachedAgents: async () => {
+    try {
+      const rows = await sqlitePersistence.getAgents();
+      if (rows.length === 0) return;
+      const cached: Agent[] = rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        description: r.description || undefined,
+        status: r.status as Agent['status'],
+      }));
+      // Only seed if the store is empty — don't clobber a fresh live fetch.
+      const current = get().agents;
+      if (current.length === 0) {
+        set({ agents: cached });
+      }
+    } catch {
+      // SQLite may be unavailable (web preview) — ignore.
+    }
+  },
   updateAgentStatus: (id, status) =>
     set((state) => ({
       agents: state.agents.map((a) => (a.id === id ? { ...a, status } : a)),
@@ -116,6 +156,23 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           status: a.status,
         }));
         set({ agents });
+
+        // Persist API agents to SQLite for offline read-only mode.
+        const now = Date.now();
+        sqlitePersistence
+          .saveAgents(
+            agents.map((a) => ({
+              id: a.id,
+              name: a.name,
+              description: a.description ?? '',
+              ip: '',
+              port: 0,
+              status: a.status,
+              source: 'proxy',
+              updated_at: now,
+            }))
+          )
+          .catch(() => { /* best-effort */ });
       } else {
         // API available but no agents registered — empty state
         set({ agents: [] });
