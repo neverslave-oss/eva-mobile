@@ -7,6 +7,12 @@ on:
 
 env:
   NODE_VERSION: '22'
+  JAVA_VERSION: '17'
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -24,7 +30,6 @@ jobs:
 
   build-android:
     needs: test
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,10 +38,46 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+
+      # ── Gradle cache ──────────────────────────────────────────
+      # Biggest win: caches Maven artifacts + pre-compiled build outputs
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches/
+            ~/.gradle/wrapper/
+          key: ${{ runner.os }}-gradle-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # ── Android SDK cache ─────────────────────────────────────
+      - name: Cache Android SDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME || '~/.android' }}/platforms/
+            ${{ env.ANDROID_HOME || '~/.android' }}/build-tools/
+            ${{ env.ANDROID_HOME || '~/.android' }}/ndk/
+            ${{ env.ANDROID_HOME || '~/.android' }}/cmake/
+          key: ${{ runner.os }}-android-sdk-${{ hashFiles('android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-android-sdk-
+
+      # ── Expo prebuild cache ───────────────────────────────────
+      # The android/ dir is deterministic from Expo config; avoid regen
+      - name: Cache Expo prebuild
+        id: cache-expo-prebuild
+        uses: actions/cache@v4
+        with:
+          path: android/
+          key: ${{ runner.os }}-expo-prebuild-${{ hashFiles('app.json', 'app.config.js', 'app.config.ts', 'package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-expo-prebuild-
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -47,10 +88,9 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: Type check
-        run: npx tsc --noEmit
-
       - name: Expo prebuild
+        # Skip if cached; generates android/ from Expo config
+        if: steps.cache-expo-prebuild.outputs.cache-hit != 'true'
         run: npx expo prebuild --platform android --no-install
 
       - name: Build APK (Gradle)
@@ -72,7 +112,6 @@ jobs:
           path: kernel-mobile-v2-*.apk
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: [build-android]
     runs-on: ubuntu-latest
     permissions:
