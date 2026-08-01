@@ -56,6 +56,27 @@ export default function BotListScreen() {
   const { agents, selectedAgentId, selectAgent, fetchAgents, feedDiscoveredPeers, loadCachedAgents } = useAgentStore();
   const { mode, serverUrl } = useSettingsStore();
   const [refreshing, setRefreshing] = React.useState(false);
+  const [scanning, setScanning] = React.useState(false);
+
+  // Shared discovery routine — used by mount, pull-to-refresh, and the
+  // "Scan again" button in the empty state so they all behave identically.
+  const runDiscovery = React.useCallback(async () => {
+    if (mode !== 'proxy') {
+      try {
+        const local = await quickScanLocalhost();
+        const serverHost = hostFromUrl(serverUrl);
+        let allPeers = [...local];
+        if (serverHost && serverHost !== '127.0.0.1' && serverHost !== 'localhost') {
+          const serverPeers = await probeHostForAllPorts(serverHost);
+          allPeers = [...allPeers, ...serverPeers];
+        }
+        allPeers = dedupePeers(allPeers);
+        if (allPeers.length > 0) feedDiscoveredPeers(allPeers);
+      } catch {
+        // Discovery is best-effort — don't break the screen.
+      }
+    }
+  }, [feedDiscoveredPeers, mode, serverUrl]);
 
   // On mount: load cached agents first (instant offline read-only display),
   // then fetch live agents from the API/proxy, then run LAN discovery.
@@ -76,25 +97,7 @@ export default function BotListScreen() {
       // 3. LAN discovery — finds agents on the local network even when the
       //    API endpoint is CORS-blocked (web preview) or unreachable.
       //    Proxy mode skips LAN scan (discovery is via the relay).
-      if (mode !== 'proxy') {
-        try {
-          const local = await quickScanLocalhost();
-          let allPeers = [...local];
-
-          const serverHost = hostFromUrl(serverUrl);
-          if (serverHost && serverHost !== '127.0.0.1' && serverHost !== 'localhost') {
-            const serverPeers = await probeHostForAllPorts(serverHost);
-            allPeers = [...allPeers, ...serverPeers];
-          }
-
-          allPeers = dedupePeers(allPeers);
-          if (allPeers.length > 0 && !cancelled) {
-            feedDiscoveredPeers(allPeers);
-          }
-        } catch {
-          // Discovery is best-effort — don't break the screen.
-        }
-      }
+      await runDiscovery();
     })();
 
     return () => { cancelled = true; };
@@ -104,21 +107,20 @@ export default function BotListScreen() {
     setRefreshing(true);
     await loadCachedAgents();
     await fetchAgents();
-    if (mode !== 'proxy') {
-      try {
-        const local = await quickScanLocalhost();
-        const serverHost = hostFromUrl(serverUrl);
-        let allPeers = [...local];
-        if (serverHost && serverHost !== '127.0.0.1' && serverHost !== 'localhost') {
-          const serverPeers = await probeHostForAllPorts(serverHost);
-          allPeers = [...allPeers, ...serverPeers];
-        }
-        allPeers = dedupePeers(allPeers);
-        if (allPeers.length > 0) feedDiscoveredPeers(allPeers);
-      } catch { /* best-effort */ }
-    }
+    await runDiscovery();
     setRefreshing(false);
-  }, [fetchAgents, feedDiscoveredPeers, loadCachedAgents, mode, serverUrl]);
+  }, [fetchAgents, loadCachedAgents, runDiscovery]);
+
+  // Dedicated handler for the "Scan again" button in the empty state.
+  // Shows its own scanning indicator (independent of the RefreshControl
+  // spinner, which only activates on pull-to-refresh).
+  const handleScanAgain = React.useCallback(async () => {
+    setScanning(true);
+    await loadCachedAgents();
+    await fetchAgents();
+    await runDiscovery();
+    setScanning(false);
+  }, [fetchAgents, loadCachedAgents, runDiscovery]);
 
   const handleAgentPress = (agent: Agent) => {
     selectAgent(agent.id);
@@ -195,8 +197,8 @@ export default function BotListScreen() {
             <Text style={styles.emptyEmoji}>🔍</Text>
             <Text style={styles.emptyTitle}>No agents found</Text>
             <Text style={styles.emptySubtext}>Try scanning for local agents</Text>
-            <TouchableOpacity style={styles.scanBtn} onPress={onRefresh}>
-              <Text style={styles.scanBtnText}>↻ Scan again</Text>
+            <TouchableOpacity style={styles.scanBtn} onPress={handleScanAgain} disabled={scanning}>
+              <Text style={styles.scanBtnText}>{scanning ? 'Scanning…' : '↻ Scan again'}</Text>
             </TouchableOpacity>
           </View>
         }

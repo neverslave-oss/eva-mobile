@@ -14,6 +14,7 @@
 | 5 | **Screens & Navigation** | 🟢 Completed | `feature/screens-navigation` | BotListScreen, ChatScreen, SettingsScreen, BotProfileScreen, MainTabs — all wired |
 | 6 | **CI/CD Pipeline** | 🔴 Not started | — | GHA workflow + self-hosted runner |
 | 7 | **Agent Chat + Telegram Pair** | 🟡 In progress | `dev` | Wire real API calls, provider routing, voice clone, inspector, command sheet, dual-mode |
+| 8 | **LAN Discovery + Offline Cache** | 🟢 Completed | `fix/cors-proof-network-discovery` | no-cors probing, private-IP guard, dedupe, SQLite agent cache, BotList discovery on mount |
 
 ## Legend
 
