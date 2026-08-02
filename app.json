@@ -32,7 +32,24 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-asset"
+      "expo-asset",
+      "expo-sqlite",
+      "expo-document-picker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Kernel needs access to your photos to pick an avatar.",
+          "cameraPermission": "Kernel needs access to your camera to take a photo for your profile."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Kernel needs access to your microphone for voice messages.",
+          "recordAudioAndroid": true,
+          "enableBackgroundPlayback": true
+        }
+      ]
     ]
   }
 }
