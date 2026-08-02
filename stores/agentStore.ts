@@ -39,6 +39,7 @@ interface AgentState {
   addAgent: (agent: Agent) => void;
   feedDiscoveredPeers: (peers: DiscoveredPeer[]) => void;
   loadCachedAgents: () => Promise<void>;
+  updateAgentProfile: (id: string, updates: Partial<Pick<Agent, 'name' | 'avatar'>>) => void;
   updateAgentStatus: (id: string, status: Agent['status']) => void;
   selectAgent: (id: string | null) => void;
   setMessages: (messages: Message[]) => void;
@@ -126,6 +127,10 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       // SQLite may be unavailable (web preview) — ignore.
     }
   },
+  updateAgentProfile: (id, updates) =>
+    set((state) => ({
+      agents: state.agents.map((a) => (a.id === id ? { ...a, ...updates } : a)),
+    })),
   updateAgentStatus: (id, status) =>
     set((state) => ({
       agents: state.agents.map((a) => (a.id === id ? { ...a, status } : a)),

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,16 @@ import {
   StyleSheet,
   SafeAreaView,
   StatusBar,
-  FlatList,
+  TextInput,
+  Alert,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as ImagePicker from 'expo-image-picker';
 import { SCREEN_NAMES, RootStackParamList } from '../types';
 import { useAgentStore } from '../stores/agentStore';
+import { kernelClient } from '../services/KernelApiClient';
 import { colors, typography, borderRadius, spacing } from '../theme';
 import Svg, { Path, Ellipse, Defs, LinearGradient, Stop } from 'react-native-svg';
 
@@ -66,7 +70,11 @@ export default function BotProfileScreen() {
   const navigation = useNavigation<any>();
   const { agentId } = route.params;
   const agent = useAgentStore((s) => s.agents.find((a) => a.id === agentId));
+  const updateAgentProfile = useAgentStore((s) => s.updateAgentProfile);
   const [activeTab, setActiveTab] = useState<TabKey>('media');
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   if (!agent) {
     return (
@@ -84,6 +92,82 @@ export default function BotProfileScreen() {
   const handleChat = () => {
     navigation.navigate(SCREEN_NAMES.Chat, { botId: agentId });
   };
+
+  const startEditing = useCallback(() => {
+    setEditName(agent?.name ?? '');
+    setEditing(true);
+  }, [agent?.name]);
+
+  const cancelEditing = useCallback(() => {
+    setEditing(false);
+    setEditName('');
+  }, []);
+
+  const pickAvatar = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Camera roll access is required to pick an avatar.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await uploadAvatar(result.assets[0]);
+  }, []);
+
+  const takePhoto = useCallback(async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Camera access is required to take a photo.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await uploadAvatar(result.assets[0]);
+  }, []);
+
+  const uploadAvatar = useCallback(async (asset: ImagePicker.ImagePickerAsset) => {
+    setUploading(true);
+    try {
+      const uri = asset.uri;
+      const fileName = asset.fileName || `avatar-${agentId}-${Date.now()}.jpg`;
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const url = await kernelClient.uploadFile(uri, fileName, mimeType);
+      if (url) {
+        updateAgentProfile(agentId, { avatar: url });
+      } else {
+        Alert.alert('Upload failed', 'Could not upload avatar to server.');
+      }
+    } catch {
+      Alert.alert('Upload error', 'An error occurred while uploading the avatar.');
+    } finally {
+      setUploading(false);
+    }
+  }, [agentId]);
+
+  const saveProfile = useCallback(async () => {
+    const name = editName.trim();
+    if (name && name !== agent?.name) {
+      updateAgentProfile(agentId, { name });
+    }
+    setEditing(false);
+  }, [editName, agentId, agent?.name]);
+
+  const showAvatarPicker = useCallback(() => {
+    Alert.alert('Change Avatar', 'Choose an image source', [
+      { text: 'Camera', onPress: takePhoto },
+      { text: 'Gallery', onPress: pickAvatar },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [pickAvatar, takePhoto]);
 
   const renderTab = (key: TabKey, label: string) => (
     <TouchableOpacity
@@ -110,21 +194,71 @@ export default function BotProfileScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>‹ Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerName} numberOfLines={1}>{agent.name}</Text>
+        <View style={styles.headerTitleRow}>
+          {editing ? (
+            <TextInput
+              style={styles.editNameInput}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Agent name"
+              placeholderTextColor={colors.textDim}
+              autoFocus
+              selectTextOnFocus
+            />
+          ) : (
+            <Text style={styles.headerName} numberOfLines={1}>{agent.name}</Text>
+          )}
+        </View>
+        <TouchableOpacity
+          style={styles.editToggleBtn}
+          onPress={editing ? cancelEditing : startEditing}
+        >
+          <Text style={styles.editToggleText}>{editing ? '✕' : '✎'}</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Profile info — v1 style large avatar + status */}
+      {/* Profile info — large avatar + status */}
       <View style={styles.profileSection}>
-        <View style={styles.largeAvatar}>
-          <SnakeEIcon size={48} />
-        </View>
-        <Text style={styles.agentName}>{agent.name}</Text>
+        <TouchableOpacity
+          style={styles.largeAvatar}
+          onPress={editing ? showAvatarPicker : undefined}
+          disabled={!editing}
+          activeOpacity={editing ? 0.7 : 1}
+        >
+          {agent.avatar ? (
+            <Image source={{ uri: agent.avatar }} style={styles.avatarImage} />
+          ) : (
+            <SnakeEIcon size={48} />
+          )}
+          {uploading && (
+            <View style={styles.avatarUploading}>
+              <ActivityIndicator size="small" color="#fff" />
+            </View>
+          )}
+          {editing && !uploading && (
+            <View style={styles.avatarEditOverlay}>
+              <Text style={styles.avatarEditIcon}>📷</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        {editing ? (
+          <TextInput
+            style={styles.editAgentNameInput}
+            value={editName}
+            onChangeText={setEditName}
+            placeholder="Agent name"
+            placeholderTextColor={colors.textDim}
+            selectTextOnFocus
+          />
+        ) : (
+          <Text style={styles.agentName}>{agent.name}</Text>
+        )}
         <Text style={[styles.agentStatus, { color: agent.status === 'online' ? colors.success : colors.textSecondary }]}>
           {agent.status === 'online' ? '● online' : agent.status}
         </Text>
       </View>
 
-      {/* Action buttons — v1's Mute/Search/Clear row */}
+      {/* Action buttons — Mute/Search/Clear row */}
       <View style={styles.actionsRow}>
         <TouchableOpacity style={styles.actionBtn}>
           <Text style={styles.actionIcon}>🔇</Text>
@@ -140,11 +274,17 @@ export default function BotProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Start Chat button */}
+      {/* Chat row — shows Save button when editing */}
       <View style={styles.chatRow}>
-        <TouchableOpacity style={styles.chatBtn} onPress={handleChat}>
-          <Text style={styles.chatBtnText}>Start Chat</Text>
-        </TouchableOpacity>
+        {editing ? (
+          <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
+            <Text style={styles.saveBtnText}>💾 Save Profile</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.chatBtn} onPress={handleChat}>
+            <Text style={styles.chatBtnText}>Start Chat</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Tab bar — v1 style Media/Files/Links */}
@@ -248,8 +388,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.accent,
   },
+  headerTitleRow: {
+    flex: 1,
+  },
   headerName: {
     ...typography.title,
+  },
+  editToggleBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.bgSurface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editToggleText: {
+    fontSize: 16,
+    color: colors.accent,
+    fontWeight: '600',
+  },
+  editNameInput: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    backgroundColor: colors.bgSurface,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.accent,
   },
   // Profile
   profileSection: {
@@ -267,6 +434,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.md,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+  },
+  avatarEditOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 48,
+  },
+  avatarEditIcon: {
+    fontSize: 24,
+  },
+  avatarUploading: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 48,
+  },
+  editAgentNameInput: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    backgroundColor: colors.bgSurface,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    textAlign: 'center',
+    minWidth: 200,
   },
   agentName: {
     ...typography.h1,
@@ -315,6 +520,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   chatBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  saveBtn: {
+    paddingVertical: spacing.md,
+    backgroundColor: colors.accent,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+  },
+  saveBtnText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#fff',
