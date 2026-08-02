@@ -13,7 +13,6 @@
     "events": "^3.3.0",
     "expo": "~57.0.9",
     "expo-asset": "~57.0.8",
-    "expo-audio": "^57.0.3",
     "expo-av": "^16.0.8",
     "expo-document-picker": "^57.0.1",
     "expo-image-picker": "^57.0.7",
