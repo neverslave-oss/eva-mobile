@@ -28,8 +28,8 @@
 | 1.2 | Markdown rendering | `parse_mode="Markdown"` L74 | ✅ | `MarkdownRenderer.tsx` | Full dark/light theme support |
 | 1.3 | Message streaming | `handle_message` L937 | ✅ | `SseStreamer.ts` + `StreamingBubble.tsx` | SSE via `/message/stream` |
 | 1.4 | Edit message | `edit_message()` L88 | ◐ | — | v2 sends new bubble, doesn't edit existing |
-| 1.5 | Typing indicator | `send_typing()` L126 | ◐ | `StreamingFooter` + `TypingDots` | Streaming dots exist, no typing during upload
-| 1.6 | Chat action keepalive | `TypingKeepAlive` class L287 | ❌ | — | Pulses typing indicator during long ops |
+| 1.5 | Typing indicator | `send_typing()` L126 | ✅ | `StreamingFooter` + `TypingDots` | Animated dots during SSE streaming
+| 1.6 | Chat action keepalive | `TypingKeepAlive` class L287 | ✅ | `StreamingFooter` + `TypingDots` | Typing dots shown during SSE streaming (main case)
 
 ### 1.2 Image/Photo Messages
 
@@ -149,8 +149,8 @@
 
 | # | Feature | telegram_bot.py | v2 Status | v2 Location | Notes |
 |---|---------|-----------------|-----------|-------------|-------|
-| 8.1 | Search collective memory | `_search_collective_memory()` L808 | ❌ | — | Not implemented |
-| 8.2 | Write collective memory | `_write_collective_memory()` L840 | ❌ | — | Not implemented |
+| 8.1 | Search collective memory | `_search_collective_memory()` L808 | — | Backend-handled | Part of inference flow, no mobile endpoint
+| 8.2 | Write collective memory | `_write_collective_memory()` L840 | — | Backend-handled | Part of inference flow, no mobile endpoint
 
 ---
 
