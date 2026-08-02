@@ -258,12 +258,40 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         }));
       },
       onDone: () => {
-        set((s) => ({
-          isStreaming: false,
-          messages: s.messages.map((m) =>
-            m.id === replyId ? { ...m, streaming: false } : m
-          ),
-        }));
+        const { messages } = get();
+        const replyMsg = messages.find((m) => m.id === replyId);
+        // If the reply contains a voice indicator, trigger voice clone playback
+        // (mirrors telegram_bot.py _send_voice_async pattern)
+        if (replyMsg && (replyMsg.text.includes('♪') || replyMsg.text.includes('[voice]'))) {
+          kernelClient.cloneVoice(replyMsg.text).then((audioUri) => {
+            if (audioUri) {
+              set((s) => ({
+                isStreaming: false,
+                messages: s.messages.map((m) =>
+                  m.id === replyId ? { ...m, streaming: false, audioUri: audioUri as unknown as string } : m
+                ),
+              }));
+              // Auto-play the cloned voice
+              import('../services/VoiceService').then(({ voiceService }) => {
+                voiceService.playAudio(audioUri as unknown as string);
+              });
+            } else {
+              set((s) => ({
+                isStreaming: false,
+                messages: s.messages.map((m) =>
+                  m.id === replyId ? { ...m, streaming: false } : m
+                ),
+              }));
+            }
+          });
+        } else {
+          set((s) => ({
+            isStreaming: false,
+            messages: s.messages.map((m) =>
+              m.id === replyId ? { ...m, streaming: false } : m
+            ),
+          }));
+        }
       },
       onError: (err) => {
         set((s) => ({
@@ -315,12 +343,38 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         }));
       },
       onDone: () => {
-        set((s) => ({
-          isStreaming: false,
-          messages: s.messages.map((m) =>
-            m.id === replyId ? { ...m, streaming: false } : m
-          ),
-        }));
+        const { messages } = get();
+        const replyMsg = messages.find((m) => m.id === replyId);
+        // Voice clone on indicator (mirrors telegram_bot.py _send_voice_async pattern)
+        if (replyMsg && (replyMsg.text.includes('♪') || replyMsg.text.includes('[voice]'))) {
+          kernelClient.cloneVoice(replyMsg.text).then((audioUri) => {
+            if (audioUri) {
+              set((s) => ({
+                isStreaming: false,
+                messages: s.messages.map((m) =>
+                  m.id === replyId ? { ...m, streaming: false, audioUri: audioUri as unknown as string } : m
+                ),
+              }));
+              import('../services/VoiceService').then(({ voiceService }) => {
+                voiceService.playAudio(audioUri as unknown as string);
+              });
+            } else {
+              set((s) => ({
+                isStreaming: false,
+                messages: s.messages.map((m) =>
+                  m.id === replyId ? { ...m, streaming: false } : m
+                ),
+              }));
+            }
+          });
+        } else {
+          set((s) => ({
+            isStreaming: false,
+            messages: s.messages.map((m) =>
+              m.id === replyId ? { ...m, streaming: false } : m
+            ),
+          }));
+        }
       },
       onError: (err) => {
         set((s) => ({

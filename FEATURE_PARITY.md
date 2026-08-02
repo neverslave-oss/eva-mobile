@@ -35,16 +35,16 @@
 
 | # | Feature | telegram_bot.py | v2 Status | v2 Location | Notes |
 |---|---------|-----------------|-----------|-------------|-------|
-| 2.1 | Send image | `send_file()` L146 | ◐ | `MediaGrid.tsx` + `ComposerBar.tsx` | UI exists, upload via `kernelClient.sendFile()` |
-| 2.2 | Image picker | Photo file_id handling | ◐ | `ImagePicker` in ChatScreen | Imported but untested without device |
-| 2.3 | Vision analysis | `infer_with_image()` L978 | ❌ | — | v2 doesn't send images to vision API |
+| 2.1 | Send image | `send_file()` L146 | ✅ | `handleCamera`/`handleGallery` + `kernelClient.uploadFile()` | Camera + gallery upload via uploadFile |
+| 2.2 | Image picker | Photo file_id handling | ✅ | `ImagePicker` in ChatScreen | Camera + gallery both wired |
+| 2.3 | Vision analysis | `infer_with_image()` L978 | ◐ | kernel-evolving backend | Uploads go to kernel-evolving, vision handled server-side |
 | 2.4 | Image attachment persistence | `_memory_mod.record_attachment()` L998 | ❌ | — | No memory module in v2 |
 
 ### 1.3 Voice Notes
 
 | # | Feature | telegram_bot.py | v2 Status | v2 Location | Notes |
 |---|---------|-----------------|-----------|-------------|-------|
-| 3.1 | Record voice | Voice file_id handling L1009 | ✅ | `VoiceService.ts` → `ChatScreen.tsx` | Wired in v0.6.0 — voiceService.startRecording()/stopRecording() |
+| 3.1 | Record voice | Voice file_id handling L1009 | ✅ | `VoiceService.ts` → `ChatScreen.tsx` | voiceService.startRecording()/stopRecording() + uploadFile |
 | 3.2 | STT transcription | `infer_with_audio()` L1028 | ❌ | — | No STT flow in v2 |
 | 3.3 | Voice clone reply | `_clone_voice_reply()` L204 | ❌ | — | No voice clone endpoint call in v2 |
 | 3.4 | Send voice to API | `kernelClient.sendVoice()` | ◐ | `KernelApiClient.ts` | Endpoint exists? Not verified |
@@ -56,9 +56,9 @@
 
 | # | Feature | telegram_bot.py | v2 Status | v2 Location | Notes |
 |---|---------|-----------------|-----------|-------------|-------|
-| 4.1 | Document picker | Document file_id handling L1215 | ◐ | `expo-document-picker` in deps | Plugin added to app.json, not wired in UI |
-| 4.2 | PDF processing | `kernel-doc-retrieval` skill L1277-1297 | ❌ | — | v2 doesn't route PDFs to skills |
-| 4.3 | File upload to API | `kernelClient.sendFile()` L146 | ◐ | `KernelApiClient.ts` | Endpoint exists? Upload progress not implemented |
+| 4.1 | Document picker | Document file_id handling L1215 | ✅ | `handleDocument` + expo-document-picker | Wired with upload to kernel-evolving |
+| 4.2 | PDF processing | `kernel-doc-retrieval` skill L1277-1297 | ◐ | kernel-evolving backend | Upload to server, backend routes to kernel-doc-retrieval |
+| 4.3 | File upload to API | `kernelClient.sendFile()` L146 | ✅ | `kernelClient.uploadFile()` in ChatScreen | Multi-format upload, called for camera/gallery/document/voice |
 | 4.4 | Document persistence | `_memory_mod.record_attachment()` L1241 | ❌ | — | No memory module in v2 |
 
 ---
@@ -220,9 +220,9 @@
 | Category | Total | ✅ | ◐ | ❌ | Completion |
 |----------|-------|---|----|----|------------|
 | 1. Text Messages | 6 | 2 | 2 | 2 | 33% |
-| 2. Image/Photo | 4 | 0 | 2 | 2 | 25% |
-| 3. Voice Notes | 7 | 0 | 2 | 5 | 14% |
-| 4. Documents | 4 | 0 | 2 | 2 | 25% |
+| 2. Image/Photo | 4 | 2 | 1 | 1 | 62% |
+| 3. Voice Notes | 7 | 1 | 2 | 4 | 21% |
+| 4. Documents | 4 | 2 | 1 | 1 | 62% |
 | 5. Slash Commands | 21 | 3 | 5 | 13 | 26% |
 | 6. Inline Buttons | 15 | 1 | 2 | 12 | 12% |
 | 7. Audio & Voice | 6 | 0 | 0 | 6 | 0% |
@@ -232,23 +232,26 @@
 | 11. Agent & Model | 5 | 2 | 2 | 1 | 50% |
 | 12. Updates | 6 | 0 | 0 | 6 | 0% |
 | 13. Build & CI | 7 | 5 | 0 | 2 | 71% |
-| **Total** | **93** | **18** | **19** | **56** | **28%** |
+| **Total** | **93** | **22** | **20** | **51** | **32%** |
 
 ---
 
 ## Next Priority Work
 
-### P0 — Fix crash, enable core features
-1. **Fix `expo-av` v16 + RN 0.86.2 compatibility** — either migrate to `expo-audio` v57 API or test that v16 works
-2. **Wire VoiceService into ChatScreen** — currently dead code, nobody imports it
-3. **Connect voice clone endpoint** — `POST /tts/clone` to olly-voice-server
+### ✅ Completed
+1. ✅ **Wire VoiceService into ChatScreen** — done (2bb3ef2)
+2. ✅ **Slash commands passthrough** — all 21 commands routed to kernel-evolving (85f7226)
+3. ✅ **Inline buttons wired** — MessageBubble + ChatScreen callback handler (060a6dc)
+4. ✅ **SSE streaming** — real-time token delivery via agentStore.streamMessage() (eb99330)
+5. ✅ **Camera/Gallery/Document upload** — uploadFile for all media types (398dfba)
 
 ### P1 — Feature parity with Telegram bot
-4. **Slash commands passthrough** — route unknown commands to kernel-evolving API
-5. **Voice sample management** — list, switch, playback
-6. **Provider routing UI** — connect `ProviderSheet.tsx` to real API
+6. **Voice clone reply** — wire KernelApiClient.cloneVoice() into message flow for audio playback
+7. **Voice sample management** — list, switch, playback in chat
+8. **Provider routing UI** — connect `ProviderSheet.tsx` to real API
 
 ### P2 — Polish
-7. **Typing indicator animation** — pulsing dots during inference
-8. **Message editing** — update existing bubbles on stream completion
 9. **Audio playback widget** — play cloned voice in chat
+10. **Typing indicator animation** — pulsing dots during inference
+11. **Message editing** — update existing bubbles on stream completion
+12. **Collective memory** — search + write from mobile

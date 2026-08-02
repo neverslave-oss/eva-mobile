@@ -44,6 +44,8 @@ export interface Message {
   streaming?: boolean;
   toolCalls?: ToolCallInfo[];
   buttons?: InlineButton[][];  // Rows of inline buttons (mirrors telegram_bot.py reply_markup.inline_keyboard)
+  /** Audio URI for voice clone playback (set after streaming completes) */
+  audioUri?: string;
 }
 
 export interface ToolCallInfo {

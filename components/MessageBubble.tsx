@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Message, InlineButton } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
 import InlineButtons from './InlineButtons';
+import { voiceService } from '../services/VoiceService';
 import { colors, borderRadius } from '../theme';
 
 interface MessageBubbleProps {
@@ -33,6 +34,12 @@ export default function MessageBubble({ message, onButtonPress }: MessageBubbleP
           </>
         )}
       </View>
+      {/* Audio playback button for voice clone replies */}
+      {!isUser && message.audioUri && (
+        <TouchableOpacity style={styles.audioPlayBtn} onPress={() => voiceService.playAudio(message.audioUri!)} activeOpacity={0.7}>
+          <Text style={styles.audioPlayBtnText}>🔊 Play voice</Text>
+        </TouchableOpacity>
+      )}
       {/* Inline buttons — mirrors telegram_bot.py reply_markup.inline_keyboard */}
       {!isUser && message.buttons && message.buttons.length > 0 && onButtonPress && (
         <View style={styles.buttonsContainer}>
@@ -123,6 +130,24 @@ const styles = StyleSheet.create({
   userTimestamp: {
     color: colors.textDim,
     textAlign: 'right',
+  },
+  audioPlayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    marginLeft: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#1a3a5c',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderLight,
+  },
+  audioPlayBtnText: {
+    fontSize: 11,
+    color: '#7eb8e0',
+    fontWeight: '500',
   },
   botTimestamp: {
     color: colors.textDim,
