@@ -19,6 +19,7 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
+import { voiceService } from '../services/VoiceService';
 import { SCREEN_NAMES, Message, RootStackParamList, ProviderRouting, WorkspaceNode } from '../types';
 import { useAgentStore } from '../stores/agentStore';
 import MessageBubble from '../components/MessageBubble';
@@ -148,12 +149,11 @@ export default function ChatScreen() {
   const [providerSheetOpen, setProviderSheetOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
 
-  // Audio recording
+  // Audio recording — wired through voiceService (mirrors telegram_bot.py voice flow)
   const [isRecording, setIsRecording] = useState(false);
   const [audioPermission, setAudioPermission] = useState(false);
-  const recordingRef = useRef<Audio.Recording | null>(null);
 
-  // Request audio permission on mount
+  // Request audio permission on mount + wire voice service callbacks
   useEffect(() => {
     (async () => {
       try {
@@ -163,6 +163,12 @@ export default function ChatScreen() {
         setAudioPermission(false);
       }
     })();
+    // Wire voice service state changes to React state
+    voiceService.setCallbacks({
+      onStateChange: (state) => setIsRecording(state === 'recording'),
+      onError: (err) => console.warn('VoiceService error:', err),
+    });
+    return () => { voiceService.dispose(); };
   }, []);
 
   // ── Fetch workspace tree on mount ──
@@ -203,29 +209,35 @@ export default function ChatScreen() {
     }
   }, [botId]);
 
-  // ── Voice recording ──
+  // ── Voice recording — wired through voiceService (mirrors telegram_bot.py voice flow) ──
   const handleStartRecording = useCallback(async () => {
     if (!audioPermission) { Alert.alert('Permission Denied', 'Microphone access is required for voice memos.'); return; }
     try {
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      recordingRef.current = recording;
-      setIsRecording(true);
+      await voiceService.startRecording();
     } catch (e) { console.warn('Recording start error:', e); }
   }, [audioPermission]);
 
   const handleStopRecording = useCallback(async () => {
-    if (!recordingRef.current) return;
     try {
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI() || '';
-      setIsRecording(false);
-      const userMsg: Message = { id: `msg-${Date.now()}`, chatId: botId || '', role: 'user', text: `🎤 Voice note recorded (${(uri.slice(-20))})`, timestamp: Date.now() };
+      const uri = await voiceService.stopRecording();
+      if (!uri) return;
+      // Upload audio to kernel-evolving for STT (mirrors telegram_bot.py voice handling)
+      const userMsg: Message = {
+        id: `msg-${Date.now()}`,
+        chatId: botId || '',
+        role: 'user',
+        text: `🎤 Voice note`,
+        timestamp: Date.now(),
+      };
       useAgentStore.getState().addMessage(userMsg);
+      // Upload audio for STT processing — kernel-evolving handles transcription
+      try {
+        const { kernelClient } = await import('../services/KernelApiClient');
+        await kernelClient.uploadFile(uri, 'voice.ogg', 'audio/ogg');
+      } catch (uploadErr) {
+        console.warn('Voice upload error:', uploadErr);
+      }
     } catch (e) { console.warn('Recording stop error:', e); }
-    recordingRef.current = null;
   }, [botId]);
 
   const handleAgentTap = () => { if (botId) navigation.navigate(SCREEN_NAMES.BotProfile, { agentId: botId }); };
@@ -433,7 +445,7 @@ export default function ChatScreen() {
                 )}
               </View>
             )}
-            {/* Send / Mic toggle — v1 style */}
+            {/* Send / Mic toggle — wired through voiceService */}
             {composerText.trim() ? (
               <TouchableOpacity
                 style={[styles.compSendBtn, styles.compSendBtnActive]}
@@ -443,7 +455,7 @@ export default function ChatScreen() {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={[styles.compSendBtn, styles.compSendBtnIdle]}
+                style={[styles.compSendBtn, isRecording ? styles.compSendBtnActive : styles.compSendBtnIdle]}
                 onPressIn={handleStartRecording}
                 onPressOut={handleStopRecording}
               >
