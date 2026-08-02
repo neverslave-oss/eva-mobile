@@ -219,7 +219,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     set({ workspaceTree: tree ?? null });
   },
 
-  // ── Send message via real API ──
+  // ── Send message via real API (SSE streaming — mirrors telegram_bot.py) ──
 
   sendMessage: async (text) => {
     const state = get();
@@ -234,21 +234,50 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     };
 
     // Add user message immediately
-    set((s) => ({ messages: [...s.messages, userMsg] }));
+    set((s) => ({ messages: [...s.messages, userMsg], isStreaming: true }));
 
-    // Send to kernel-evolving API
-    const replyText = await kernelClient.triage(text, { chatId: agentId || undefined });
-
-    const reply: Message = {
-      id: `msg-${Date.now()}-ai`,
+    // Create empty streaming assistant message
+    const replyId = `msg-${Date.now()}-ai`;
+    const streamingMsg: Message = {
+      id: replyId,
       chatId: agentId || 'default',
       role: 'assistant',
-      text: replyText,
+      text: '',
       timestamp: Date.now(),
+      streaming: true,
     };
+    set((s) => ({ messages: [...s.messages, streamingMsg] }));
 
-    set((s) => ({ messages: [...s.messages, reply] }));
-    return reply;
+    // Stream tokens from kernel-evolving SSE endpoint
+    kernelClient.streamMessage(text, {
+      onToken: (token) => {
+        set((s) => ({
+          messages: s.messages.map((m) =>
+            m.id === replyId ? { ...m, text: m.text + token } : m
+          ),
+        }));
+      },
+      onDone: () => {
+        set((s) => ({
+          isStreaming: false,
+          messages: s.messages.map((m) =>
+            m.id === replyId ? { ...m, streaming: false } : m
+          ),
+        }));
+      },
+      onError: (err) => {
+        set((s) => ({
+          isStreaming: false,
+          messages: s.messages.map((m) =>
+            m.id === replyId
+              ? { ...m, text: m.text || `🐬 Error: ${err.message}`, streaming: false }
+              : m
+          ),
+        }));
+      },
+    }, { chatId: agentId || undefined });
+
+    return null; // Streaming — message built incrementally
   },
 
   sendSlashCommand: async (cmd) => {
@@ -263,21 +292,49 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       timestamp: Date.now(),
     };
 
-    set((s) => ({ messages: [...s.messages, userMsg], isStreaming: true }));
-
-    // Route all slash commands through triage — kernel-evolving handles the rest
-    const replyText = await kernelClient.triage(cmd, { chatId: agentId || undefined });
-
-    const reply: Message = {
-      id: `msg-${Date.now()}-ai`,
+    // Create empty streaming assistant message
+    const replyId = `msg-${Date.now()}-ai`;
+    const streamingMsg: Message = {
+      id: replyId,
       chatId: agentId || 'default',
       role: 'assistant',
-      text: replyText,
+      text: '',
       timestamp: Date.now(),
+      streaming: true,
     };
 
-    set((s) => ({ messages: [...s.messages, reply], isStreaming: false }));
-    return reply;
+    set((s) => ({ messages: [...s.messages, userMsg, streamingMsg], isStreaming: true }));
+
+    // Stream tokens from kernel-evolving SSE endpoint
+    kernelClient.streamMessage(cmd, {
+      onToken: (token) => {
+        set((s) => ({
+          messages: s.messages.map((m) =>
+            m.id === replyId ? { ...m, text: m.text + token } : m
+          ),
+        }));
+      },
+      onDone: () => {
+        set((s) => ({
+          isStreaming: false,
+          messages: s.messages.map((m) =>
+            m.id === replyId ? { ...m, streaming: false } : m
+          ),
+        }));
+      },
+      onError: (err) => {
+        set((s) => ({
+          isStreaming: false,
+          messages: s.messages.map((m) =>
+            m.id === replyId
+              ? { ...m, text: m.text || `🐬 Error: ${err.message}`, streaming: false }
+              : m
+          ),
+        }));
+      },
+    }, { chatId: agentId || undefined });
+
+    return null; // Streaming — message built incrementally
   },
 
   clearConversation: async () => {
