@@ -28,7 +28,7 @@
 | 1.2 | Markdown rendering | `parse_mode="Markdown"` L74 | ✅ | `MarkdownRenderer.tsx` | Full dark/light theme support |
 | 1.3 | Message streaming | `handle_message` L937 | ✅ | `SseStreamer.ts` + `StreamingBubble.tsx` | SSE via `/message/stream` |
 | 1.4 | Edit message | `edit_message()` L88 | ◐ | — | v2 sends new bubble, doesn't edit existing |
-| 1.5 | Typing indicator | `send_typing()` L126 | ◐ | `ConnectionBadge.tsx` | Shows connection status, no typing dots |
+| 1.5 | Typing indicator | `send_typing()` L126 | ◐ | `StreamingFooter` + `TypingDots` | Streaming dots exist, no typing during upload
 | 1.6 | Chat action keepalive | `TypingKeepAlive` class L287 | ❌ | — | Pulses typing indicator during long ops |
 
 ### 1.2 Image/Photo Messages
@@ -46,10 +46,10 @@
 |---|---------|-----------------|-----------|-------------|-------|
 | 3.1 | Record voice | Voice file_id handling L1009 | ✅ | `VoiceService.ts` → `ChatScreen.tsx` | voiceService.startRecording()/stopRecording() + uploadFile |
 | 3.2 | STT transcription | `infer_with_audio()` L1028 | ❌ | — | No STT flow in v2 |
-| 3.3 | Voice clone reply | `_clone_voice_reply()` L204 | ❌ | — | No voice clone endpoint call in v2 |
+| 3.3 | Voice clone reply | `_clone_voice_reply()` L204 | ✅ | `agentStore.ts` + `MessageBubble.tsx` | Wired in streaming onDone callback, auto-play via VoiceService
 | 3.4 | Send voice to API | `kernelClient.sendVoice()` | ◐ | `KernelApiClient.ts` | Endpoint exists? Not verified |
-| 3.5 | Voice playback in chat | Audio widget | ◐ | `VoiceService.playAudio()` | Method exists, not yet wired into message bubbles |
-| 3.6 | Voice sample management | `_list_voice_samples()` L193 | ❌ | — | `/voices` feature not implemented |
+| 3.5 | Voice playback in chat | Audio widget | ✅ | `MessageBubble.tsx` audioPlayBtn | 🔊 Play voice button + auto-play on voice indicator
+| 3.6 | Voice sample management | `_list_voice_samples()` L193 | ✅ | `VoiceSamplesSheet.tsx` + `ChatScreen` dropdown | List, active indicator, switch via kernelClient |
 | 3.7 | First-contact sample save | L1057-1070 | ❌ | — | No auto-sample collection |
 
 ### 1.4 Document/File Messages
@@ -116,7 +116,7 @@
 | 6.5 | Modal provider picker | `_show_modal_provider_picker()` L423 | ❌ | — | Not implemented |
 | 6.6 | Cloud model picker | `_show_cloud_model_picker()` L504 | ❌ | — | Not implemented |
 | 6.7 | Modal model picker | `_show_modal_model_picker()` L446 | ❌ | — | Not implemented |
-| 6.8 | Apply model routing | `_apply_modal_model()` L467 | ◐ | `ProviderSheet.tsx` | UI exists, API not wired |
+| 6.8 | Apply model routing | `_apply_modal_model()` L467 | ✅ | `ProviderSheet.tsx` | Calls kernelClient.setProvider() for all call types |
 
 ### 3.3 Agent Actions
 
@@ -138,8 +138,8 @@
 |---|---------|-----------------|-----------|-------------|-------|
 | 7.1 | Local TTS (Qwen3) | `_clone_voice_reply()` L204 local path | ❌ | `VoiceService.ts` | Import from expo-av, no server call |
 | 7.2 | Cloud TTS | `_clone_voice_reply()` cloud path L219 | ❌ | — | Not implemented |
-| 7.3 | Voice sample listing | `_list_voice_samples()` L193 | ❌ | — | Not implemented |
-| 7.4 | Voice sample switching | `handle_callback` L680 `set_voice_` | ❌ | — | Not implemented |
+| 7.3 | Voice sample listing | `_list_voice_samples()` L193 | ✅ | `VoiceSamplesSheet.tsx` | Fetches from kernelClient.listVoiceSamples()
+| 7.4 | Voice sample switching | `handle_callback` L680 `set_voice_` | ✅ | `VoiceSamplesSheet.tsx` | Calls kernelClient.setActiveVoice(index)
 | 7.5 | Send voice file | `send_voice()` L162 | ❌ | — | Not implemented |
 | 7.6 | Voice activity context | `voice_activity("clone")` L266 | ❌ | — | Not implemented |
 
@@ -158,7 +158,7 @@
 
 | # | Feature | telegram_bot.py | v2 Status | v2 Location | Notes |
 |---|---------|-----------------|-----------|-------------|-------|
-| 9.1 | Trigger evolution | `/evolve` command | ◐ | `SlashCommandSheet.tsx` | Mock only |
+| 9.1 | Trigger evolution | `/evolve` command | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
 | 9.2 | Evolution status | Evolution state display | ❌ | — | Not implemented |
 | 9.3 | Failed request handling | `_fr.increment_retry()` L730 | ❌ | — | Not implemented |
 
@@ -185,8 +185,8 @@
 | 11.1 | Agent list | — | ✅ | `BotListScreen.tsx` | LAN discovery + API |
 | 11.2 | Agent profile | — | ✅ | `BotProfileScreen.tsx` | Avatar, status, edit |
 | 11.3 | Model info | `_get_current_model_label()` L344 | ❌ | — | Not implemented |
-| 11.4 | Provider routing | Provider management flow | ◐ | `ProviderSheet.tsx` | UI exists, API not wired |
-| 11.5 | Agent inference | `triage()` L1117 | ◐ | `sendMessage()` in agentStore | Routes to `kernelClient.triage()` |
+| 11.4 | Provider routing | Provider management flow | ✅ | `ProviderSheet.tsx` | Real API calls via kernelClient.setProvider()
+| 11.5 | Agent inference | `triage()` L1117 | ✅ | `sendMessage()` in agentStore | SSE streaming via kernelClient.streamMessage() |
 
 ### 7.3 Updates & Maintenance
 
