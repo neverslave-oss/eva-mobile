@@ -269,6 +269,15 @@ export default function ChatScreen() {
   }, [composerText]);
 
   // ── Render message ──
+  const handleButtonPress = useCallback((callback: string) => {
+    // Route inline button callbacks through sendMessage (mirrors telegram_bot.py handle_callback → handle_message)
+    if (callback.startsWith('/')) {
+      sendSlashCommand(callback);
+    } else {
+      sendMessage(callback);
+    }
+  }, [sendMessage, sendSlashCommand]);
+
   const renderMessage = ({ item }: { item: Message }) => (
     <View style={item.role === 'user' ? styles.msgRowUser : styles.msgRowBot}>
       {item.role === 'assistant' && (
@@ -278,7 +287,7 @@ export default function ChatScreen() {
       )}
       <View style={{ maxWidth: '82%' }}>
         {item.role === 'assistant' && <TouchableOpacity onPress={handleAgentTap}><Text style={styles.msgAgentLabel}>{agent?.name || 'Agent'}</Text></TouchableOpacity>}
-        <MessageBubble message={item} />
+        <MessageBubble message={item} onButtonPress={handleButtonPress} />
         <Text style={[styles.msgTimestamp, item.role === 'user' && styles.msgTimestampRight]}>
           {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Text>

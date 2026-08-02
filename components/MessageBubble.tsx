@@ -1,14 +1,16 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Message } from '../types';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Message, InlineButton } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
+import InlineButtons from './InlineButtons';
 import { colors, borderRadius } from '../theme';
 
 interface MessageBubbleProps {
   message: Message;
+  onButtonPress?: (callback: string) => void;
 }
 
-export default function MessageBubble({ message }: MessageBubbleProps) {
+export default function MessageBubble({ message, onButtonPress }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
   return (
@@ -31,6 +33,25 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           </>
         )}
       </View>
+      {/* Inline buttons — mirrors telegram_bot.py reply_markup.inline_keyboard */}
+      {!isUser && message.buttons && message.buttons.length > 0 && onButtonPress && (
+        <View style={styles.buttonsContainer}>
+          {message.buttons.map((row, rowIdx) => (
+            <View key={rowIdx} style={styles.buttonRow}>
+              {row.map((btn, btnIdx) => (
+                <TouchableOpacity
+                  key={`${rowIdx}-${btnIdx}`}
+                  style={[styles.inlineBtn, { flex: 1 / row.length }]}
+                  onPress={() => onButtonPress(btn.callback)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.inlineBtnText}>{btn.text}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ))}
+        </View>
+      )}
       {message.timestamp && (
         <Text style={[styles.timestamp, isUser ? styles.userTimestamp : styles.botTimestamp]}>
           {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -106,5 +127,29 @@ const styles = StyleSheet.create({
   botTimestamp: {
     color: colors.textDim,
     textAlign: 'left',
+  },
+  // Inline buttons (mirrors telegram_bot.py inline_keyboard)
+  buttonsContainer: {
+    marginTop: 6,
+    marginHorizontal: 4,
+    gap: 4,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  inlineBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#242f3d',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderLight,
+    alignItems: 'center',
+  },
+  inlineBtnText: {
+    fontSize: 12,
+    color: '#e4e4e7',
+    fontWeight: '500',
   },
 });

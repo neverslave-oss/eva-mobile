@@ -29,6 +29,12 @@ export interface AgentInfo {
   status: 'online' | 'offline';
 }
 
+export interface InlineButton {
+  text: string;
+  callback: string;
+  style?: 'primary' | 'secondary' | 'danger';
+}
+
 export interface Message {
   id: string;
   chatId: string;
@@ -37,6 +43,7 @@ export interface Message {
   timestamp: number;
   streaming?: boolean;
   toolCalls?: ToolCallInfo[];
+  buttons?: InlineButton[][];  // Rows of inline buttons (mirrors telegram_bot.py reply_markup.inline_keyboard)
 }
 
 export interface ToolCallInfo {

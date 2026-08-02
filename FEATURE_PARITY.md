@@ -104,8 +104,8 @@
 
 | # | Feature | telegram_bot.py | v2 Status | v2 Location | Notes |
 |---|---------|-----------------|-----------|-------------|-------|
-| 6.1 | Send inline buttons | `send_buttons()` L107 | ✅ | `InlineButtons.tsx` | Renders callback buttons in chat |
-| 6.2 | Handle button callbacks | `handle_callback()` L580 | ◐ | `InlineButtons.tsx` | Routes to `handle_message()` fallback |
+| 6.1 | Send inline buttons | `send_buttons()` L107 | ✅ | `MessageBubble.tsx` + `InlineButtons.tsx` | Wired into bubble rendering |
+| 6.2 | Handle button callbacks | `handle_callback()` L580 | ✅ | `MessageBubble.tsx` → `ChatScreen.handleButtonPress()` | Routes callback through sendMessage/sendSlashCommand |
 | 6.3 | Edit message after callback | `edit_message()` L88 | ❌ | — | No message editing in v2 |
 
 ### 3.2 Provider Routing
