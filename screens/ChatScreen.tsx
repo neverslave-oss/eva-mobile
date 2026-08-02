@@ -18,6 +18,7 @@ import {
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
 import { voiceService } from '../services/VoiceService';
 import { SCREEN_NAMES, Message, RootStackParamList, ProviderRouting, WorkspaceNode } from '../types';
@@ -199,16 +200,66 @@ export default function ChatScreen() {
     }
   }, [botId, sendMessage, sendSlashCommand]);
 
-  // ── Camera picker ──
+  // ── Camera picker (mirrors telegram_bot.py multimodal photo flow) ──
   const handleCamera = useCallback(async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) { Alert.alert('Permission Denied', 'Camera access is required to take photos.'); return; }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8, base64: false });
     if (!result.canceled && result.assets[0]) {
       const img = result.assets[0];
+      const ext = img.uri.split('.').pop() || 'jpg';
       const caption = `📷 Image captured`;
       const userMsg: Message = { id: `msg-${Date.now()}`, chatId: botId || '', role: 'user', text: `${caption}\n${img.uri}`, timestamp: Date.now() };
       useAgentStore.getState().addMessage(userMsg);
+      // Upload to kernel-evolving for vision analysis (mirrors telegram_bot.py infer_with_image)
+      try {
+        const { kernelClient } = await import('../services/KernelApiClient');
+        await kernelClient.uploadFile(img.uri, `camera.${ext}`, `image/${ext}`);
+      } catch (uploadErr) {
+        console.warn('Camera upload error:', uploadErr);
+      }
+    }
+  }, [botId]);
+
+  // ── Gallery picker (mirrors telegram_bot.py photo selection flow) ──
+  const handleGallery = useCallback(async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('Permission Denied', 'Gallery access is required to pick photos.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8, base64: false });
+    if (!result.canceled && result.assets[0]) {
+      const img = result.assets[0];
+      const ext = img.uri.split('.').pop() || 'jpg';
+      const userMsg: Message = { id: `msg-${Date.now()}`, chatId: botId || '', role: 'user', text: `🖼️ Image selected\n${img.uri}`, timestamp: Date.now() };
+      useAgentStore.getState().addMessage(userMsg);
+      // Upload to kernel-evolving for vision analysis
+      try {
+        const { kernelClient } = await import('../services/KernelApiClient');
+        await kernelClient.uploadFile(img.uri, `gallery.${ext}`, `image/${ext}`);
+      } catch (uploadErr) {
+        console.warn('Gallery upload error:', uploadErr);
+      }
+    }
+  }, [botId]);
+
+  // ── Document picker (mirrors telegram_bot.py document handling → kernel-doc-retrieval) ──
+  const handleDocument = useCallback(async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+      if (!result.canceled && result.assets[0]) {
+        const doc = result.assets[0];
+        const ext = doc.name?.split('.').pop() || 'bin';
+        const userMsg: Message = { id: `msg-${Date.now()}`, chatId: botId || '', role: 'user', text: `📄 Document: ${doc.name}\n${doc.uri}`, timestamp: Date.now() };
+        useAgentStore.getState().addMessage(userMsg);
+        // Upload to kernel-evolving — backend routes to kernel-doc-retrieval skill
+        try {
+          const { kernelClient } = await import('../services/KernelApiClient');
+          await kernelClient.uploadFile(doc.uri, doc.name || `doc.${ext}`, doc.mimeType || 'application/octet-stream');
+        } catch (uploadErr) {
+          console.warn('Document upload error:', uploadErr);
+        }
+      }
+    } catch (e) {
+      console.warn('Document picker error:', e);
     }
   }, [botId]);
 
@@ -446,10 +497,10 @@ export default function ChatScreen() {
                       <TouchableOpacity style={styles.pickerItem} onPress={() => { setPickerOpen(false); handleCamera(); }}>
                         <Text style={styles.pickerItemText}>📷 Camera</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.pickerItem} onPress={() => setPickerOpen(false)}>
+                      <TouchableOpacity style={styles.pickerItem} onPress={() => { setPickerOpen(false); handleGallery(); }}>
                         <Text style={styles.pickerItemText}>🖼️ Gallery</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.pickerItem} onPress={() => setPickerOpen(false)}>
+                      <TouchableOpacity style={styles.pickerItem} onPress={() => { setPickerOpen(false); handleDocument(); }}>
                         <Text style={styles.pickerItemText}>📄 File</Text>
                       </TouchableOpacity>
                     </View>
