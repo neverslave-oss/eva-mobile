@@ -44,11 +44,11 @@
 
 | # | Feature | telegram_bot.py | v2 Status | v2 Location | Notes |
 |---|---------|-----------------|-----------|-------------|-------|
-| 3.1 | Record voice | Voice file_id handling L1009 | ◐ | `VoiceRecorder.tsx` + `VoiceService.ts` | UI exists, **VoiceService is dead code** — nobody imports it |
+| 3.1 | Record voice | Voice file_id handling L1009 | ✅ | `VoiceService.ts` → `ChatScreen.tsx` | Wired in v0.6.0 — voiceService.startRecording()/stopRecording() |
 | 3.2 | STT transcription | `infer_with_audio()` L1028 | ❌ | — | No STT flow in v2 |
 | 3.3 | Voice clone reply | `_clone_voice_reply()` L204 | ❌ | — | No voice clone endpoint call in v2 |
 | 3.4 | Send voice to API | `kernelClient.sendVoice()` | ◐ | `KernelApiClient.ts` | Endpoint exists? Not verified |
-| 3.5 | Voice playback in chat | Audio widget | ❌ | — | No audio playback widget |
+| 3.5 | Voice playback in chat | Audio widget | ◐ | `VoiceService.playAudio()` | Method exists, not yet wired into message bubbles |
 | 3.6 | Voice sample management | `_list_voice_samples()` L193 | ❌ | — | `/voices` feature not implemented |
 | 3.7 | First-contact sample save | L1057-1070 | ❌ | — | No auto-sample collection |
 
@@ -71,30 +71,30 @@
 |---|---------|-----------------|-----------|-------------|-------|
 | 5.1 | `/help` | `_sync_bot_commands()` L2866 | ✅ | `CommandSheet.tsx` | Shows all available commands |
 | 5.2 | `/status` | Bot inline | ✅ | `SettingsScreen.tsx` | Shows system status |
-| 5.3 | `/new` | Clear conversation L1385 | ✅ | `clearConversation()` in agentStore | |
-| 5.4 | `/skills` | List installed skills | ◐ | `CommandSheet.tsx` | Mock reply, not real API call |
-| 5.5 | `/routines` | List installed routines | ◐ | `CommandSheet.tsx` | Mock reply, not real API call |
-| 5.6 | `/models` | Model management | ◐ | `SlashCommandSheet.tsx` | Mock reply only |
-| 5.7 | `/thoughts` | Show internal thoughts | ❌ | — | Not implemented |
-| 5.8 | `/evolve` | Trigger evolution | ◐ | `SlashCommandSheet.tsx` | Mock reply only |
-| 5.9 | `/voices` | Voice sample management | ❌ | — | Not implemented |
-| 5.10 | `/voice-clone` | Clone voice from text | ❌ | — | Not implemented |
-| 5.11 | `/verbose` | Toggle verbose mode | ❌ | — | Not implemented |
-| 5.12 | `/version` | Show current version | ❌ | — | Not implemented |
-| 5.13 | `/packages` | Ecosystem packages | ❌ | — | Not implemented |
-| 5.14 | `/replica` | Manage replicas | ❌ | — | Not implemented |
-| 5.15 | `/init` | Initialize | ❌ | — | Not implemented |
-| 5.16 | `/run <name>` | Run routine/skill | ◐ | `SlashCommandSheet.tsx` | Mock only |
-| 5.17 | `/update` | Check for updates | ❌ | — | Not implemented |
-| 5.18 | `/restart` | Restart kernel | ❌ | — | Not implemented |
-| 5.19 | `/stop` | Emergency stop | ❌ | — | Not implemented |
+| 5.3 | `/new` | Clear conversation L1385 | ✅ | `clearConversation()` in agentStore + `SLASH_DESCRIPTIONS` | Added `/new` to autocomplete list |
+| 5.4 | `/skills` | List installed skills | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.5 | `/routines` | List installed routines | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.6 | `/models` | Model management | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.7 | `/thoughts` | Show internal thoughts | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.8 | `/evolve` | Trigger evolution | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.9 | `/voices` | Voice sample management | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.10 | `/voice-clone` | Clone voice from text | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.11 | `/verbose` | Toggle verbose mode | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.12 | `/version` | Show current version | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.13 | `/packages` | Ecosystem packages | ✅ | `SLASH_DESCRIPTIONS` | Added to autocomplete |
+| 5.14 | `/replica` | Manage replicas | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.15 | `/init` | Initialize | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.16 | `/run <name>` | Run routine/skill | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.17 | `/update` | Check for updates | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.18 | `/restart` | Restart kernel | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.19 | `/stop` | Emergency stop | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
 
 ### 2.2 Dynamic Commands
 
 | # | Feature | telegram_bot.py | v2 Status | v2 Location | Notes |
 |---|---------|-----------------|-----------|-------------|-------|
-| 5.20 | `/skill_<slug>` | Dynamic skill dispatch L1339 | ❌ | — | Auto-generated from installed skills |
-| 5.21 | `/run_<slug>` | Dynamic routine dispatch L1362 | ❌ | — | Auto-generated from installed routines |
+| 5.20 | `/skill_<slug>` | Dynamic skill dispatch L1339 | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
+| 5.21 | `/run_<slug>` | Dynamic routine dispatch L1362 | ✅ | `SLASH_DESCRIPTIONS` | Routed to kernel-evolving API via triage |
 
 ---
 

@@ -32,30 +32,33 @@ import Svg, { Path, Ellipse, Defs, LinearGradient, Stop, Circle, Rect } from 're
 // ─── Local types ───
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
-// ─── Slash command descriptions for autocomplete (source: telegram_bot.py) ───
+// ─── Slash command descriptions for autocomplete (source: telegram_bot.py _sync_bot_commands) ───
 const SLASH_DESCRIPTIONS: Record<string, string> = {
-  '/help': 'Show available commands',
-  '/status': 'Agent status, uptime, model info',
-  '/skills': 'List loaded skills',
-  '/routines': 'List active routines',
-  '/models': 'Show active/available models',
-  '/local': 'Switch to local model inference',
-  '/cloud': 'Switch to cloud provider inference',
-  '/provider': 'Pick model provider',
-  '/evolve': 'Run self-evolution cycle',
-  '/replica': 'Spawn replica agent',
-  '/voices': 'Show available voice samples',
-  '/voice-clone': 'Clone your voice from a sample',
-  '/init': 'Reinitialize agent configuration',
-  '/stop': 'Graceful agent shutdown',
-  '/restart': 'Full agent restart',
-  '/update': 'Pull latest version from repo',
+  '/help': 'Show command menu',
+  '/status': 'System + model status',
+  '/skills': 'List installed skills',
+  '/routines': 'List installed routines',
+  '/models': 'Switch / download models',
+  '/local': 'Load Nemotron locally',
+  '/cloud': 'Switch all to cloud providers',
+  '/provider': 'Pick model provider per call type',
+  '/evolve': 'Trigger evolution / inspect state',
+  '/replica': 'Manage agent replicas',
+  '/voices': 'Show / switch voice samples',
+  '/voice-clone': 'Clone voice from text',
+  '/init': 'Initialize workspace / databases',
+  '/stop': '🛑 Emergency stop — kills everything',
+  '/restart': 'Restart kernel-evolving',
+  '/update': 'Check for updates',
   '/rollback': 'Rollback to previous version',
   '/system': 'System diagnostics (CPU/GPU/RAM)',
-  '/version': 'Show agent version info',
-  '/thoughts': 'Show Kernel\'s current thoughts',
-  '/verbose': 'Toggle verbose logging mode',
+  '/version': 'Show current version',
+  '/thoughts': 'Recent internal thoughts',
+  '/verbose': 'Toggle verbose step output',
   '/workspaces': 'List available agent workspaces',
+  '/new': 'Start a fresh conversation',
+  '/packages': 'Ecosystem packages (install/search)',
+  '/run': 'Run a routine or skill',
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
