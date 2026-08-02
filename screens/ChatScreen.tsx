@@ -133,6 +133,8 @@ export default function ChatScreen() {
   const providerRouting = useAgentStore((s) => s.providerRouting);
   const workspaceTree = useAgentStore((s) => s.workspaceTree);
   const fetchWorkspaceTree = useAgentStore((s) => s.fetchWorkspaceTree);
+  const voiceSamples = useAgentStore((s) => s.voiceSamples);
+  const fetchVoiceSamples = useAgentStore((s) => s.fetchVoiceSamples);
   const flatListRef = useRef<FlatList>(null);
   const textareaRef = useRef<TextInput>(null);
 
@@ -428,6 +430,9 @@ export default function ChatScreen() {
                 <View style={styles.dropdownDivider} />
                 <TouchableOpacity style={styles.dropdownItem} onPress={() => handleMenuAction('settings')}>
                   <Text style={styles.dropdownItemText}>⚙️ Settings</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.dropdownItem} onPress={() => handleMenuAction('voices')}>
+                  <Text style={styles.dropdownItemText}>🎤 Voice samples</Text>
                 </TouchableOpacity>
               </View>
             </>
