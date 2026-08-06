@@ -359,7 +359,7 @@ export default function SettingsScreen() {
                     style={styles.input}
                     value={localProxyUrl}
                     onChangeText={(t) => { setLocalProxyUrl(t); setProxyUrl(t); }}
-                    placeholder="https://kernel-central.neverslave.dev"
+                    placeholder="https://kernel-central.neverslave.com"
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}

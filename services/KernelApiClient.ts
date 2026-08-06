@@ -64,7 +64,7 @@ class KernelApiClient {
    */
   private get proxyBase(): string {
     const store = useSettingsStore.getState();
-    const url = store.proxyUrl || 'https://kernel-central.neverslave.dev';
+    const url = store.proxyUrl || 'https://kernel-central.neverslave.com';
     return url.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '');
   }
 

@@ -78,6 +78,12 @@ class SqlitePersistence {
     this.initialized = true;
   }
 
+  /** Ensures schema exists before any query — lazy-init guard for every public method. */
+  private async ready(): Promise<SQLite.SQLiteDatabase> {
+    await this.init();
+    return getDb();
+  }
+
   private async migrateV1(database: SQLite.SQLiteDatabase): Promise<void> {
     await database.execAsync(`
       CREATE TABLE IF NOT EXISTS conversations (
@@ -125,7 +131,7 @@ class SqlitePersistence {
 
   /** Get all conversations for an agent */
   async getConversations(agentId: string): Promise<ConversationRow[]> {
-    const database = await getDb();
+    const database = await this.ready();
     return database.getAllAsync<ConversationRow>(
       `SELECT * FROM conversations WHERE agent_id = ? ORDER BY updated_at DESC`,
       agentId
@@ -134,7 +140,7 @@ class SqlitePersistence {
 
   /** Save or update a conversation */
   async saveConversation(conv: ConversationRow): Promise<void> {
-    const database = await getDb();
+    const database = await this.ready();
     await database.runAsync(
       `INSERT OR REPLACE INTO conversations (id, agent_id, title, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?)`,
@@ -148,7 +154,7 @@ class SqlitePersistence {
 
   /** Delete a conversation and all its messages */
   async deleteConversation(id: string): Promise<void> {
-    const database = await getDb();
+    const database = await this.ready();
     await database.runAsync(`DELETE FROM messages WHERE conversation_id = ?`, id);
     await database.runAsync(`DELETE FROM conversations WHERE id = ?`, id);
   }
@@ -157,7 +163,7 @@ class SqlitePersistence {
 
   /** Get messages for a conversation (oldest first) */
   async getMessages(conversationId: string): Promise<MessageRow[]> {
-    const database = await getDb();
+    const database = await this.ready();
     return database.getAllAsync<MessageRow>(
       `SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC`,
       conversationId
@@ -166,7 +172,7 @@ class SqlitePersistence {
 
   /** Save a single message */
   async saveMessage(msg: MessageRow): Promise<void> {
-    const database = await getDb();
+    const database = await this.ready();
     await database.runAsync(
       `INSERT OR REPLACE INTO messages (id, conversation_id, role, text, timestamp)
        VALUES (?, ?, ?, ?, ?)`,
@@ -178,27 +184,29 @@ class SqlitePersistence {
     );
   }
 
-  /** Save multiple messages in a transaction */
+  /** Save multiple messages in a transaction — all-or-nothing on failure */
   async saveMessages(msgs: MessageRow[]): Promise<void> {
-    const database = await getDb();
-    for (const msg of msgs) {
-      await database.runAsync(
-        `INSERT OR REPLACE INTO messages (id, conversation_id, role, text, timestamp)
-         VALUES (?, ?, ?, ?, ?)`,
-        msg.id,
-        msg.conversation_id,
-        msg.role,
-        msg.text,
-        msg.timestamp
-      );
-    }
+    const database = await this.ready();
+    await database.withTransactionAsync(async () => {
+      for (const msg of msgs) {
+        await database.runAsync(
+          `INSERT OR REPLACE INTO messages (id, conversation_id, role, text, timestamp)
+           VALUES (?, ?, ?, ?, ?)`,
+          msg.id,
+          msg.conversation_id,
+          msg.role,
+          msg.text,
+          msg.timestamp
+        );
+      }
+    });
   }
 
   // ─── Settings ───
 
   /** Get an app setting by key */
   async getSetting(key: string): Promise<string | null> {
-    const database = await getDb();
+    const database = await this.ready();
     const row = await database.getFirstAsync<{ value: string }>(
       `SELECT value FROM app_settings WHERE key = ?`,
       key
@@ -208,7 +216,7 @@ class SqlitePersistence {
 
   /** Set an app setting */
   async setSetting(key: string, value: string): Promise<void> {
-    const database = await getDb();
+    const database = await this.ready();
     await database.runAsync(
       `INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)`,
       key,
@@ -218,7 +226,7 @@ class SqlitePersistence {
 
   /** Delete a setting */
   async deleteSetting(key: string): Promise<void> {
-    const database = await getDb();
+    const database = await this.ready();
     await database.runAsync(`DELETE FROM app_settings WHERE key = ?`, key);
   }
 
@@ -226,7 +234,7 @@ class SqlitePersistence {
 
   /** Load all cached agents (offline read-only mode). */
   async getAgents(): Promise<AgentRow[]> {
-    const database = await getDb();
+    const database = await this.ready();
     return database.getAllAsync<AgentRow>(
       `SELECT * FROM agents ORDER BY updated_at DESC`
     );
@@ -234,7 +242,7 @@ class SqlitePersistence {
 
   /** Upsert a single agent into the cache. */
   async saveAgent(agent: AgentRow): Promise<void> {
-    const database = await getDb();
+    const database = await this.ready();
     await database.runAsync(
       `INSERT OR REPLACE INTO agents
          (id, name, description, ip, port, status, source, updated_at)
@@ -250,29 +258,31 @@ class SqlitePersistence {
     );
   }
 
-  /** Upsert many agents in one go (used after a LAN/proxy scan). */
+  /** Upsert many agents in one go (used after a LAN/proxy scan) — transactional */
   async saveAgents(agents: AgentRow[]): Promise<void> {
-    const database = await getDb();
-    for (const a of agents) {
-      await database.runAsync(
-        `INSERT OR REPLACE INTO agents
-           (id, name, description, ip, port, status, source, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        a.id,
-        a.name,
-        a.description,
-        a.ip,
-        a.port,
-        a.status,
-        a.source,
-        a.updated_at
-      );
-    }
+    const database = await this.ready();
+    await database.withTransactionAsync(async () => {
+      for (const a of agents) {
+        await database.runAsync(
+          `INSERT OR REPLACE INTO agents
+             (id, name, description, ip, port, status, source, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          a.id,
+          a.name,
+          a.description,
+          a.ip,
+          a.port,
+          a.status,
+          a.source,
+          a.updated_at
+        );
+      }
+    });
   }
 
   /** Mark a cached agent's status (e.g. online → offline when unreachable). */
   async setAgentStatus(id: string, status: string): Promise<void> {
-    const database = await getDb();
+    const database = await this.ready();
     await database.runAsync(
       `UPDATE agents SET status = ?, updated_at = ? WHERE id = ?`,
       status,
@@ -283,13 +293,13 @@ class SqlitePersistence {
 
   /** Remove a cached agent by id. */
   async deleteAgent(id: string): Promise<void> {
-    const database = await getDb();
+    const database = await this.ready();
     await database.runAsync(`DELETE FROM agents WHERE id = ?`, id);
   }
 
   /** Clear all cached agents (e.g. on logout / mode switch). */
   async clearAgents(): Promise<void> {
-    const database = await getDb();
+    const database = await this.ready();
     await database.runAsync(`DELETE FROM agents`);
   }
 }
