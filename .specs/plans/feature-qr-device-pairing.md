@@ -3,7 +3,7 @@ date: 2026-08-06
 agent: copilot
 topic: Feature — QR device pairing screen for kernel-mobile-v2
 tags: [react-native, expo, qr, pairing, xp5]
-status: open
+status: done
 depends_on: [XP1a (kernel-central PrivateChannel fix)]
 ---
 

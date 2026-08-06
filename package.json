@@ -12,6 +12,7 @@
     "axios": "^1.19.0",
     "events": "^3.3.0",
     "expo": "~57.0.9",
+    "expo-camera": "~17.0.0",
     "expo-asset": "~57.0.8",
     "expo-av": "^16.0.8",
     "expo-document-picker": "^57.0.1",

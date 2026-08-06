@@ -9,6 +9,8 @@ export interface AppSettings {
   authToken: string;
   onboardingCompleted: boolean;
   theme: 'dark' | 'light';
+  deviceToken: string;
+  deviceSecret: string;
 }
 
 export interface Agent {
@@ -188,6 +190,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   authToken: '',
   onboardingCompleted: false,
   theme: 'dark',
+  deviceToken: '',
+  deviceSecret: '',
 };
 
 export const SCREEN_NAMES = {
@@ -197,6 +201,7 @@ export const SCREEN_NAMES = {
   Chat: 'Chat',
   Settings: 'Settings',
   BotProfile: 'BotProfile',
+  Pair: 'Pair',
 } as const;
 
 export type RootStackParamList = {
@@ -206,4 +211,5 @@ export type RootStackParamList = {
   [SCREEN_NAMES.Chat]: { botId?: string };
   [SCREEN_NAMES.Settings]: undefined;
   [SCREEN_NAMES.BotProfile]: { agentId: string };
+  [SCREEN_NAMES.Pair]: undefined;
 };

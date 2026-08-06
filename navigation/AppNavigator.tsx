@@ -9,6 +9,7 @@ import BotListScreen from '../screens/BotListScreen';
 import ChatScreen from '../screens/ChatScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import BotProfileScreen from '../screens/BotProfileScreen';
+import PairScreen from '../screens/PairScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -33,6 +34,7 @@ export default function AppNavigator() {
         <Stack.Screen name={SCREEN_NAMES.Chat} component={ChatScreen} />
         <Stack.Screen name={SCREEN_NAMES.Settings} component={SettingsScreen} />
         <Stack.Screen name={SCREEN_NAMES.BotProfile} component={BotProfileScreen} />
+        <Stack.Screen name={SCREEN_NAMES.Pair} component={PairScreen} options={{ title: 'Pair Device' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -644,6 +644,26 @@ class KernelApiClient {
       return res.data?.url ?? null;
     } catch { return null; }
   }
+
+  // XP5: confirm device pairing with kernel-central using token+secret from QR code
+  async confirmPairing(
+    centralUrl: string,
+    token: string,
+    secret: string,
+  ): Promise<{ success: boolean; device_id?: number }> {
+    try {
+      const res = await fetch(`${centralUrl.replace(/\/$/, '')}/api/devices/${token}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret }),
+      });
+      if (!res.ok) return { success: false };
+      const data = await res.json();
+      return { success: true, device_id: data.device_id };
+    } catch {
+      return { success: false };
+    }
+  }
 }
 
 export const kernelClient = new KernelApiClient();
