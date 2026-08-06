@@ -36,6 +36,12 @@
       "expo-sqlite",
       "expo-document-picker",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Kernel needs camera access to scan the device pairing QR code."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Kernel needs access to your photos to pick an avatar.",

@@ -16,6 +16,8 @@ interface SettingsState {
   authToken: string;
   user: UserInfo | null;
   onboardingCompleted: boolean;
+  deviceToken: string;
+  deviceSecret: string;
   setMode: (mode: ConnectionMode) => void;
   setServerUrl: (url: string) => void;
   setProxyUrl: (url: string) => void;
@@ -24,6 +26,7 @@ interface SettingsState {
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   setOnboardingCompleted: (v: boolean) => void;
+  pairDevice: (token: string, secret: string, centralUrl: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -36,6 +39,8 @@ export const useSettingsStore = create<SettingsState>()(
       authToken: DEFAULT_SETTINGS.authToken,
       user: null,
       onboardingCompleted: DEFAULT_SETTINGS.onboardingCompleted,
+      deviceToken: DEFAULT_SETTINGS.deviceToken,
+      deviceSecret: DEFAULT_SETTINGS.deviceSecret,
       setMode: (mode) => set({ mode }),
       setServerUrl: (url) => set({ serverUrl: url }),
       setProxyUrl: (url) => set({ proxyUrl: url }),
@@ -99,6 +104,20 @@ export const useSettingsStore = create<SettingsState>()(
       },
 
       setOnboardingCompleted: (v) => set({ onboardingCompleted: v }),
+
+      pairDevice: async (token: string, secret: string, centralUrl: string) => {
+        const KernelApiClientModule = await import('../services/KernelApiClient');
+        const client = new KernelApiClientModule.default();
+        const result = await client.confirmPairing(centralUrl, token, secret);
+        if (!result.success) throw new Error('Pairing confirmation failed');
+        set({
+          mode: 'proxy',
+          proxyUrl: centralUrl,
+          deviceToken: token,
+          deviceSecret: secret,
+        });
+      },
+
       reset: () =>
         set({
           mode: DEFAULT_SETTINGS.mode,
@@ -107,6 +126,8 @@ export const useSettingsStore = create<SettingsState>()(
           authToken: '',
           user: null,
           onboardingCompleted: false,
+          deviceToken: '',
+          deviceSecret: '',
         }),
     }),
     {
