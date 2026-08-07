@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "kernel-mobile-temp",
-    "slug": "kernel-mobile-temp",
+    "name": "Eva Agent",
+    "slug": "eva-agent",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -26,7 +26,7 @@
         "ACCESS_WIFI_STATE",
         "CHANGE_WIFI_STATE"
       ],
-      "package": "com.anonymous.kernelmobiletemp"
+      "package": "com.neverslave.evaagent"
     },
     "web": {
       "favicon": "./assets/favicon.png"
