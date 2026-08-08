@@ -4,7 +4,7 @@ agent: scout
 topic: No tests for core store logic, API client, or screen flows — only NetworkDiscovery covered
 severity: normal
 tags: [scout, agent-ready]
-status: open
+status: resolved
 ---
 
 # No tests for core store logic, API client, or screen flows — only NetworkDiscovery covered

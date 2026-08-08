@@ -4,7 +4,7 @@ agent: scout
 topic: SqlitePersistence.saveMessages() missing transaction — partial writes on failure
 severity: normal
 tags: [scout, agent-ready]
-status: open
+status: resolved
 ---
 
 # SqlitePersistence.saveMessages() missing transaction — partial writes on failure

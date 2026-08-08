@@ -4,7 +4,7 @@ agent: scout
 topic: SqlitePersistence.init() never called — DB used before schema exists
 severity: high
 tags: [scout, agent-ready]
-status: open
+status: resolved
 ---
 
 # SqlitePersistence.init() never called — DB used before schema exists
