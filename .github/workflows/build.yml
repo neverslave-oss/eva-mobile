@@ -93,16 +93,22 @@ jobs:
         if: steps.cache-expo-prebuild.outputs.cache-hit != 'true'
         run: npx expo prebuild --platform android --no-install
 
-      - name: Build APK (Gradle)
+      # ── Create embedded JS bundle for release ───────────────
+      # expo export:embed is the official way to pre-package the
+      # JS bundle into the native android build for release APKs
+      - name: Embed JS bundle
+        run: npx expo export:embed --platform android
+
+      - name: Build release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
       - name: Rename APK
         run: |
           VERSION=$(node -p "require('./app.json').expo.version")
-          mv android/app/build/outputs/apk/debug/app-debug.apk \
+          mv android/app/build/outputs/apk/release/app-release.apk \
             kernel-mobile-v2-${VERSION}.apk
 
       - name: Upload APK artifact
