@@ -50,7 +50,7 @@ describe('settingsStore', () => {
       expect(useSettingsStore.getState().user).toEqual({ id: 1, name: 'Fabio', email: 'f@x.com' });
       expect((globalThis as any).fetch).toHaveBeenNthCalledWith(
         1,
-        'https://kc.example.com/api/tokens',
+        'https://kc.example.com/api/auth/login',
         expect.objectContaining({ method: 'POST' })
       );
     });

@@ -50,17 +50,23 @@ describe('KernelApiClient', () => {
       );
     });
 
-    it('proxy mode: triage routes through the relay endpoint', async () => {
+    it('proxy mode: triage routes through relay create + relay status poll', async () => {
       useSettingsStore.getState().setMode('proxy');
       useSettingsStore.getState().setProxyUrl('https://kc.example.com/api/v1');
-      mockAxiosInstance.post.mockResolvedValue({ data: { response: 'pong' } });
+      useSettingsStore.setState({ deviceId: 42 });
+      mockAxiosInstance.post.mockResolvedValue({ data: { data: { relay_id: '01HXYZ' } } });
+      mockAxiosInstance.get.mockResolvedValue({ data: { data: { status: 'responded', response: 'pong' } } });
 
       const reply = await kernelClient.triage('ping');
 
       expect(reply).toBe('pong');
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
         'https://kc.example.com/api/messages/relay',
-        { message: 'ping' },
+        { device_id: 42, message: 'ping' },
+        expect.any(Object)
+      );
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith(
+        'https://kc.example.com/api/messages/relay/01HXYZ',
         expect.any(Object)
       );
     });

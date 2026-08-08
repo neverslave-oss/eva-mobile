@@ -18,6 +18,7 @@ interface SettingsState {
   onboardingCompleted: boolean;
   deviceToken: string;
   deviceSecret: string;
+  deviceId: number | null;
   setMode: (mode: ConnectionMode) => void;
   setServerUrl: (url: string) => void;
   setProxyUrl: (url: string) => void;
@@ -41,6 +42,7 @@ export const useSettingsStore = create<SettingsState>()(
       onboardingCompleted: DEFAULT_SETTINGS.onboardingCompleted,
       deviceToken: DEFAULT_SETTINGS.deviceToken,
       deviceSecret: DEFAULT_SETTINGS.deviceSecret,
+      deviceId: DEFAULT_SETTINGS.deviceId,
       setMode: (mode) => set({ mode }),
       setServerUrl: (url) => set({ serverUrl: url }),
       setProxyUrl: (url) => set({ proxyUrl: url }),
@@ -115,6 +117,7 @@ export const useSettingsStore = create<SettingsState>()(
           proxyUrl: centralUrl,
           deviceToken: token,
           deviceSecret: secret,
+          deviceId: result.device_id ?? null,
         });
       },
 
@@ -128,6 +131,7 @@ export const useSettingsStore = create<SettingsState>()(
           onboardingCompleted: false,
           deviceToken: '',
           deviceSecret: '',
+          deviceId: null,
         }),
     }),
     {

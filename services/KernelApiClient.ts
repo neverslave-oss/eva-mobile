@@ -84,26 +84,106 @@ class KernelApiClient {
    * POST /api/messages/relay → KC → Reverb WS → kernel-desktop tunnel
    * → kernel-evolving → response back → KC → mobile
    */
-  async relayMessage(text: string): Promise<string> {
+  private get proxyDeviceId(): number | null {
+    const id = this.cfg.deviceId;
+    if (typeof id === 'number' && Number.isFinite(id) && id > 0) return id;
+    return null;
+  }
+
+  private async createRelay(text: string): Promise<{ relayId?: string; error?: string }> {
+    const deviceId = this.proxyDeviceId;
+    if (!deviceId) {
+      return { error: 'Device not paired. Re-scan QR pairing code.' };
+    }
+
     try {
       const res = await this.client.post(
         `${this.base}/messages/relay`,
-        { message: text },
+        { device_id: deviceId, message: text },
         {
-          timeout: 120000,
+          timeout: 15000,
           headers: this.authHeaders(),
         }
       );
-      return res.data?.data?.response ?? res.data?.response ?? '🐬 Done.';
+
+      const relayId = res.data?.data?.relay_id;
+      if (!relayId) {
+        return { error: 'Relay id missing in proxy response.' };
+      }
+      return { relayId };
     } catch (e: any) {
-      const msg = e?.response?.data?.error || e?.message || 'Relay error';
-      return `🐬 Error: ${msg}`;
+      const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Relay error';
+      return { error: msg };
     }
   }
 
+  private async waitRelayResponse(
+    relayId: string,
+    signal?: AbortSignal,
+  ): Promise<{ response?: string; error?: string }> {
+    const timeoutMs = 120000;
+    const intervalMs = 1200;
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      if (signal?.aborted) {
+        return { error: 'Cancelled' };
+      }
+
+      try {
+        const res = await this.client.get(`${this.base}/messages/relay/${relayId}`, {
+          timeout: 10000,
+          headers: this.authHeaders(),
+        });
+
+        const status = res.data?.data?.status;
+        const responseText = res.data?.data?.response;
+
+        if (status === 'responded') {
+          return { response: responseText ?? '' };
+        }
+
+        if (status === 'timed_out') {
+          return { error: 'Proxy relay timed out.' };
+        }
+      } catch (e: any) {
+        const msg = e?.response?.data?.message || e?.message || 'Relay status error';
+        return { error: msg };
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, intervalMs);
+        if (signal) {
+          const onAbort = () => {
+            clearTimeout(t);
+            reject(new Error('AbortError'));
+          };
+          signal.addEventListener('abort', onAbort, { once: true });
+        }
+      }).catch((err) => {
+        if ((err as Error).message === 'AbortError') throw err;
+      });
+    }
+
+    return { error: 'Proxy relay timeout.' };
+  }
+
+  async relayMessage(text: string): Promise<string> {
+    const created = await this.createRelay(text);
+    if (!created.relayId) {
+      return `🐬 Error: ${created.error || 'Relay error'}`;
+    }
+
+    const resolved = await this.waitRelayResponse(created.relayId);
+    if (resolved.error) {
+      return `🐬 Error: ${resolved.error}`;
+    }
+
+    return resolved.response ?? '🐬 Done.';
+  }
+
   /**
-   * Stream a message via proxy — uses kernel-central's relay API
-   * with SSE-like polling for response chunks.
+   * Stream a message via proxy by creating a relay, then polling for final response.
    */
   streamRelayMessage(
     text: string,
@@ -111,50 +191,27 @@ class KernelApiClient {
     options?: { chatId?: string }
   ): AbortController {
     const controller = new AbortController();
-    const url = `${this.base}/messages/relay/stream?text=${encodeURIComponent(text)}${
-      options?.chatId ? `&chat_id=${options.chatId}` : ''
-    }`;
 
-    const opts: Record<string, any> = {
-      method: 'GET',
-      signal: controller.signal,
-    };
-    const headers = this.authHeaders();
-    if (Object.keys(headers).length) opts.headers = headers;
-
-    fetch(url, opts)
-      .then(async (response) => {
-        if (!response.ok || !response.body) {
-          callbacks.onError(new Error(`HTTP ${response.status}`));
+    this.createRelay(text)
+      .then(async (created) => {
+        if (!created.relayId) {
+          callbacks.onError(new Error(created.error || 'Relay error'));
           return;
         }
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') { callbacks.onDone(); return; }
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.event === 'token' || parsed.text) {
-                  callbacks.onToken(parsed.text ?? '');
-                }
-              } catch { callbacks.onToken(data); }
-            }
-          }
+        const resolved = await this.waitRelayResponse(created.relayId, controller.signal);
+        if (resolved.error) {
+          callbacks.onError(new Error(resolved.error));
+          return;
         }
+
+        callbacks.onToken(resolved.response ?? '');
         callbacks.onDone();
       })
       .catch((err) => {
-        if (err.name !== 'AbortError') callbacks.onError(err);
+        if (err?.message !== 'AbortError' && err?.name !== 'AbortError') {
+          callbacks.onError(err);
+        }
       });
 
     return controller;
@@ -659,7 +716,8 @@ class KernelApiClient {
       });
       if (!res.ok) return { success: false };
       const data = await res.json();
-      return { success: true, device_id: data.device_id };
+      const deviceId = data?.data?.device_id ?? data?.device_id;
+      return { success: true, device_id: typeof deviceId === 'number' ? deviceId : undefined };
     } catch {
       return { success: false };
     }

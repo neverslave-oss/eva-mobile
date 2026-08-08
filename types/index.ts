@@ -11,6 +11,7 @@ export interface AppSettings {
   theme: 'dark' | 'light';
   deviceToken: string;
   deviceSecret: string;
+  deviceId: number | null;
 }
 
 export interface Agent {
@@ -192,6 +193,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
   deviceToken: '',
   deviceSecret: '',
+  deviceId: null,
 };
 
 export const SCREEN_NAMES = {
