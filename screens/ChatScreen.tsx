@@ -19,7 +19,7 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Audio } from 'expo-av';
+import { requestRecordingPermissionsAsync } from 'expo-audio';
 import { voiceService } from '../services/VoiceService';
 import { SCREEN_NAMES, Message, RootStackParamList, ProviderRouting, WorkspaceNode } from '../types';
 import { useAgentStore } from '../stores/agentStore';
@@ -163,7 +163,7 @@ export default function ChatScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const perm = await Audio.requestPermissionsAsync();
+        const perm = await requestRecordingPermissionsAsync();
         setAudioPermission(perm.granted);
       } catch {
         setAudioPermission(false);

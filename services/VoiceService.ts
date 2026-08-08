@@ -1,9 +1,19 @@
 /**
- * VoiceService — audio recording and playback using expo-audio / expo-av
+ * VoiceService — audio recording and playback using expo-audio
  * Records voice, uploads to kernel-evolving for STT, plays back responses.
+ *
+ * expo-audio imperative API (non-hook) used since this is a singleton service.
+ *
+ * @see https://docs.expo.dev/versions/latest/sdk/audio/
  */
 
-import { Audio } from 'expo-av';
+import {
+  createAudioPlayer,
+  setAudioModeAsync,
+  requestRecordingPermissionsAsync,
+  RecordingPresets,
+  AudioModule,
+} from 'expo-audio';
 
 type VoiceState = 'idle' | 'recording' | 'playing';
 
@@ -14,10 +24,11 @@ interface RecordingCallbacks {
 }
 
 class VoiceService {
-  private recording: Audio.Recording | null = null;
-  private sound: Audio.Sound | null = null;
+  private player: import('expo-audio').AudioPlayer | null = null;
+  private recorder: import('expo-audio').AudioRecorder | null = null;
   private state: VoiceState = 'idle';
   private callbacks: RecordingCallbacks = {};
+  private playbackCheckTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     this.setupAudio();
@@ -25,11 +36,11 @@ class VoiceService {
 
   private async setupAudio(): Promise<void> {
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: true,
+        shouldPlayInBackground: false,
+        interruptionMode: 'duckOthers',
       });
     } catch (err) {
       console.warn('VoiceService: audio setup failed', err);
@@ -57,15 +68,17 @@ class VoiceService {
       // Ensure previous recording is cleaned up
       await this.cleanupRecording();
 
-      const { recording, status } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-
-      if (!status.canRecord) {
-        throw new Error('Cannot start recording');
+      // Request microphone permission
+      const { granted } = await requestRecordingPermissionsAsync();
+      if (!granted) {
+        throw new Error('Microphone permission denied');
       }
 
-      this.recording = recording;
+      // Create recorder with HIGH_QUALITY preset
+      this.recorder = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      await this.recorder.prepareToRecordAsync();
+      this.recorder.record();
+
       this.setState('recording');
       return true;
     } catch (err: any) {
@@ -78,13 +91,13 @@ class VoiceService {
   /** Stop recording and return the file URI */
   async stopRecording(): Promise<string | null> {
     try {
-      if (!this.recording) {
+      if (!this.recorder) {
         return null;
       }
 
-      await this.recording.stopAndUnloadAsync();
-      const uri = this.recording.getURI();
-      this.recording = null;
+      await this.recorder.stop();
+      const uri = this.recorder.uri;
+      this.recorder = null;
       this.setState('idle');
 
       if (uri) {
@@ -104,19 +117,20 @@ class VoiceService {
     try {
       await this.stopAudio();
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true }
-      );
-
-      this.sound = sound;
+      // Create an imperative AudioPlayer that doesn't auto-release
+      this.player = createAudioPlayer(uri);
+      this.player.play();
       this.setState('playing');
 
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && !status.isPlaying && status.didJustFinish) {
+      // Poll for playback completion
+      // AudioPlayer doesn't expose a didJustFinish event imperatively,
+      // so we check the `playing` property periodically.
+      this.playbackCheckTimer = setInterval(() => {
+        if (this.player && !this.player.playing) {
+          this.clearPlaybackCheckTimer();
           this.setState('idle');
         }
-      });
+      }, 500);
 
       return true;
     } catch (err: any) {
@@ -128,27 +142,31 @@ class VoiceService {
 
   /** Stop current playback */
   async stopAudio(): Promise<void> {
-    if (this.sound) {
+    this.clearPlaybackCheckTimer();
+
+    if (this.player) {
       try {
-        await this.sound.stopAsync();
-        await this.sound.unloadAsync();
+        this.player.pause();
+        // Wait briefly for pause to settle, then release
+        await new Promise((r) => setTimeout(r, 50));
+        this.player.remove();
       } catch {
         // Ignore cleanup errors
       }
-      this.sound = null;
+      this.player = null;
       this.setState('idle');
     }
   }
 
   /** Cancel ongoing recording */
   async cancelRecording(): Promise<void> {
-    if (this.recording) {
+    if (this.recorder) {
       try {
-        await this.recording.stopAndUnloadAsync();
+        await this.recorder.stop();
       } catch {
         // Ignore
       }
-      this.recording = null;
+      this.recorder = null;
       this.setState('idle');
     }
   }
@@ -164,14 +182,21 @@ class VoiceService {
     await this.stopAudio();
   }
 
+  private clearPlaybackCheckTimer(): void {
+    if (this.playbackCheckTimer !== null) {
+      clearInterval(this.playbackCheckTimer);
+      this.playbackCheckTimer = null;
+    }
+  }
+
   private async cleanupRecording(): Promise<void> {
-    if (this.recording) {
+    if (this.recorder) {
       try {
-        await this.recording.stopAndUnloadAsync();
+        await this.recorder.stop();
       } catch {
         // Ignore
       }
-      this.recording = null;
+      this.recorder = null;
     }
   }
 }

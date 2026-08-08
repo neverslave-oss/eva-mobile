@@ -13,7 +13,7 @@
     "events": "^3.3.0",
     "expo": "~57.0.11",
     "expo-asset": "~57.0.9",
-    "expo-av": "^16.0.8",
+    "expo-audio": "^57.0.3",
     "expo-camera": "~57.0.3",
     "expo-document-picker": "^57.0.1",
     "expo-image-picker": "~57.0.8",
@@ -54,12 +54,6 @@
         "jest"
       ]
     },
-    "doctor": {
-      "reactNativeDirectoryCheck": {
-        "exclude": [
-          "expo-av"
-        ]
-      }
-    }
+    "doctor": {}
   }
 }

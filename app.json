@@ -10,7 +10,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "kernel-mobile needs local network access to discover AI agents on your LAN (kernel-evolving, Hermes, OpenClaw)."
-      }
+      },
+      "bundleIdentifier": "com.neverslave.evaagent"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,10 +22,12 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_WIFI_STATE",
-        "CHANGE_WIFI_STATE"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.CHANGE_WIFI_STATE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ],
       "package": "com.neverslave.evaagent"
     },
