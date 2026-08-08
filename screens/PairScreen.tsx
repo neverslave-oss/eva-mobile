@@ -28,10 +28,12 @@ export default function PairScreen({ navigation }: Props) {
     setConfirming(true);
     setStatus('Confirming with server…');
     try {
-      const payload = JSON.parse(data);
-      const { token, secret, url } = payload as { token: string; secret: string; url: string };
-      if (!token || !secret || !url) throw new Error('Invalid QR payload');
-      await pairDevice(token, secret, url);
+      // QR format: kc-pair://confirm?token=xxx&secret=xxx&device_id=xxx
+      const url = new URL(data);
+      const token = url.searchParams.get('token');
+      const secret = url.searchParams.get('secret');
+      if (!token || !secret) throw new Error('Invalid QR payload - missing token or secret');
+      await pairDevice(token, secret, useSettingsStore.getState().proxyUrl);
       navigation.replace(SCREEN_NAMES.BotList);
     } catch (e) {
       setStatus('Pairing failed: ' + String(e instanceof Error ? e.message : e));

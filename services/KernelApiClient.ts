@@ -652,10 +652,10 @@ class KernelApiClient {
     secret: string,
   ): Promise<{ success: boolean; device_id?: number }> {
     try {
-      const res = await fetch(`${centralUrl.replace(/\/$/, '')}/api/devices/${token}/confirm`, {
+      const res = await fetch(`${centralUrl.replace(/\/$/, '')}/api/devices/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ secret }),
+        body: JSON.stringify({ pair_token: token, pair_secret: secret }),
       });
       if (!res.ok) return { success: false };
       const data = await res.json();

@@ -84,8 +84,8 @@ export default function SettingsScreen() {
 
   // ── KM-002: Login state ──
   const [showLogin, setShowLogin] = useState(false);
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+  const [loginToken, setLoginToken] = useState('');
+  const [loginSecret, setLoginSecret] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loggingIn, setLoggingIn] = useState(false);
 
@@ -145,7 +145,7 @@ export default function SettingsScreen() {
   // ── Browser-based OAuth Login (KM-002) ──
 
   const handleBrowserLogin = async () => {
-    const baseUrl = proxyUrl || DEFAULT_SETTINGS.proxyUrl;
+    const baseUrl = localProxyUrl || DEFAULT_SETTINGS.proxyUrl;
     const cleanBase = baseUrl.replace(/\/api.*$/, '').replace(/\/$/, '');
     const loginUrl = `${cleanBase}/auth/mobile?redirect=evaagent%3A%2F%2Fauth`;
     setStatusMessage('Opening browser…');
@@ -190,28 +190,29 @@ export default function SettingsScreen() {
   // ── KM-002: Login / Account ──
 
   const handleLogin = async () => {
-    if (!loginEmail || !loginPassword) {
-      setLoginError('Email and password are required');
+    if (!loginToken || !loginSecret) {
+      setLoginError('Both token and secret from the QR code are required');
       return;
     }
     setLoggingIn(true);
     setLoginError(null);
 
-    const ok = await login(loginEmail, loginPassword);
-    if (ok) {
-      setLoginEmail('');
-      setLoginPassword('');
+    try {
+      const baseUrl = localProxyUrl || DEFAULT_SETTINGS.proxyUrl;
+      const cleanBase = baseUrl.replace(/\/api.*$/, '').replace(/\/$/, '');
+      await pairDevice(loginToken, loginSecret, cleanBase);
+      setLoginToken('');
+      setLoginSecret('');
       setShowLogin(false);
       setLoginError(null);
-      // After login, check proxy connection
-      setStatusMessage('✅ Logged in. Checking connection…');
+      setStatusMessage('✅ Device paired. Checking connection…');
       setTesting(true);
       const healthOk = await kernelClient.healthCheck();
       setConnected(healthOk);
       setStatusMessage(healthOk ? '✅ Proxy connected' : '❌ Proxy unreachable');
       setTesting(false);
-    } else {
-      setLoginError('Login failed. Check credentials and proxy URL.');
+    } catch (e: any) {
+      setLoginError('Pairing failed: ' + (e?.message || 'Check token and secret'));
     }
     setLoggingIn(false);
   };
@@ -448,27 +449,27 @@ export default function SettingsScreen() {
                 ) : showLogin ? (
                   <View style={styles.loginForm}>
                     <View style={styles.inputGroup}>
-                      <Text style={styles.inputLabel}>EMAIL</Text>
+                      <Text style={styles.inputLabel}>PAIR TOKEN (from QR code)</Text>
                       <TextInput
                         style={styles.input}
-                        value={loginEmail}
-                        onChangeText={setLoginEmail}
-                        placeholder="email@example.com"
+                        value={loginToken}
+                        onChangeText={setLoginToken}
+                        placeholder="Paste the token from kernel-central"
                         placeholderTextColor={colors.textMuted}
                         autoCapitalize="none"
                         autoCorrect={false}
-                        keyboardType="email-address"
                       />
                     </View>
                     <View style={styles.inputGroup}>
-                      <Text style={styles.inputLabel}>PASSWORD</Text>
+                      <Text style={styles.inputLabel}>PAIR SECRET (from QR code)</Text>
                       <TextInput
                         style={styles.input}
-                        value={loginPassword}
-                        onChangeText={setLoginPassword}
-                        placeholder="••••••••"
+                        value={loginSecret}
+                        onChangeText={setLoginSecret}
+                        placeholder="Paste the secret from kernel-central"
                         placeholderTextColor={colors.textMuted}
-                        secureTextEntry
+                        autoCapitalize="none"
+                        autoCorrect={false}
                       />
                     </View>
                     {loginError && (
@@ -481,13 +482,16 @@ export default function SettingsScreen() {
                         disabled={loggingIn}
                       >
                         <Text style={styles.applyBtnText}>
-                          {loggingIn ? 'Logging in…' : 'Login'}
+                          {loggingIn ? 'Pairing…' : 'Pair Device'}
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.resetBtn} onPress={() => setShowLogin(false)}>
                         <Text style={styles.resetBtnText}>Cancel</Text>
                       </TouchableOpacity>
                     </View>
+                    <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' }}>
+                      Get token+secret from kernel-central → Devices → Pair Device
+                    </Text>
                   </View>
                 ) : (
                   <View style={{ gap: spacing.sm }}>
