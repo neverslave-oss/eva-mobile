@@ -50,10 +50,10 @@ export const useSettingsStore = create<SettingsState>()(
       login: async (email: string, password: string) => {
         const { proxyUrl } = get();
         const baseUrl = proxyUrl || DEFAULT_SETTINGS.proxyUrl;
-        const loginUrl = baseUrl.replace(/\/api.*$/, '') + '/api/tokens';
+        const loginUrl = baseUrl.replace(/\/api.*$/, '') + '/api/auth/login';
 
         try {
-          // Use email+password to create a Sanctum token
+          // Use email+password to obtain a Sanctum token via the PUBLIC auth endpoint
           const response = await fetch(loginUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -9,17 +9,37 @@ import {
   StatusBar,
   ScrollView,
   Alert,
+  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAppStore } from '../stores/appStore';
 import { useAgentStore } from '../stores/agentStore';
-import { RootStackParamList } from '../types';
+import { RootStackParamList, DEFAULT_SETTINGS } from '../types';
 import { colors, typography, borderRadius, spacing } from '../theme';
 import { scanLan, quickScanLocalhost, probeHostForAllPorts, hostFromUrl, dedupePeers, DiscoveredPeer, ScanProgress } from '../services/NetworkDiscovery';
 import { kernelClient } from '../services/KernelApiClient';
 import Svg, { Path } from 'react-native-svg';
+
+// In-app browser for OAuth login flow — opens kernel-central login in a modal browser
+// and captures the redirect with the Sanctum token.
+let _WebBrowser: any = null;
+async function getWebBrowser() {
+  if (!_WebBrowser) {
+    try {
+      _WebBrowser = await import('expo-web-browser');
+    } catch {
+      _WebBrowser = { openAuthSessionAsync: async () => ({ type: 'cancel' as const }) };
+    }
+  }
+  return _WebBrowser;
+}
+type WebBrowserResult = {
+  type: 'success' | 'cancel' | 'dismiss';
+  url?: string;
+};
+
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -120,6 +140,51 @@ export default function SettingsScreen() {
     setLocalProxyUrl(proxyUrl);
     setStatusMessage(null);
     setTestResult(null);
+  };
+
+  // ── Browser-based OAuth Login (KM-002) ──
+
+  const handleBrowserLogin = async () => {
+    const baseUrl = proxyUrl || DEFAULT_SETTINGS.proxyUrl;
+    const cleanBase = baseUrl.replace(/\/api.*$/, '').replace(/\/$/, '');
+    const loginUrl = `${cleanBase}/auth/mobile?redirect=evaagent%3A%2F%2Fauth`;
+    setStatusMessage('Opening browser…');
+    setLoginError(null);
+
+    try {
+      const WB = await getWebBrowser();
+      const result = await WB.openAuthSessionAsync(loginUrl, 'evaagent://auth');
+
+      if (result.type === 'success' && result.url) {
+        // Extract token from redirect URL
+        const url = result.url;
+        const params = new URLSearchParams(url.split('?')[1] || '');
+        const token = params.get('token');
+        const name = params.get('name');
+        const email = params.get('email');
+
+        if (token) {
+          setAuthToken(token);
+          if (name && email) {
+            setUser({ id: parseInt(params.get('user_id') || '0'), name, email });
+          }
+          setProxyUrl(cleanBase);
+          setStatusMessage('✅ Logged in. Checking connection…');
+          setTesting(true);
+          const healthOk = await kernelClient.healthCheck();
+          setConnected(healthOk);
+          setStatusMessage(healthOk ? '✅ Proxy connected' : '❌ Proxy unreachable');
+          setTesting(false);
+        } else {
+          setLoginError('Login failed — no token in response');
+        }
+      } else if (result.type === 'cancel' || result.type === 'dismiss') {
+        setStatusMessage(null);
+        setLoginError('Login cancelled');
+      }
+    } catch (e: any) {
+      setLoginError('Browser login failed: ' + (e?.message || 'unknown'));
+    }
   };
 
   // ── KM-002: Login / Account ──
@@ -425,9 +490,14 @@ export default function SettingsScreen() {
                     </View>
                   </View>
                 ) : (
-                  <TouchableOpacity style={styles.loginBtn} onPress={() => setShowLogin(true)}>
-                    <Text style={styles.loginBtnText}>🔑 Login to kernel-central</Text>
-                  </TouchableOpacity>
+                  <View style={{ gap: spacing.sm }}>
+                    <TouchableOpacity style={styles.loginBtn} onPress={handleBrowserLogin}>
+                      <Text style={styles.loginBtnText}>🔑 Login via Browser</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setShowLogin(true)}>
+                      <Text style={{ fontSize: 11, color: colors.textMuted, textAlign: 'center' }}>Manual login (email/password)</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
               </>
             )}

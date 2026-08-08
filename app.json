@@ -2,7 +2,8 @@
   "expo": {
     "name": "Eva Agent",
     "slug": "eva-agent",
-    "version": "1.0.0",
+    "scheme": "evaagent",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -29,7 +30,19 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.neverslave.evaagent"
+      "package": "com.neverslave.evaagent",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "evaagent"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -50,7 +63,14 @@
           "photosPermission": "Kernel needs access to your photos to pick an avatar.",
           "cameraPermission": "Kernel needs access to your camera to take a photo for your profile."
         }
-      ]
-    ]
+      ],
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3279c464-1e7a-4590-be56-5dd5eb03a652"
+      }
+    },
+    "owner": "olly-fp-bots-team"
   }
 }
