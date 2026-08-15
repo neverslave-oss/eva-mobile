@@ -20,7 +20,7 @@ import { colors, typography, borderRadius, spacing } from '../theme';
 import { CALL_TYPES, CALL_TYPE_LABELS, PROVIDER_NAMES, ProviderRouting, ProviderRoute, CallType } from '../types';
 import { kernelClient } from '../services/KernelApiClient';
 
-const PROVIDER_OPTIONS = ['local', 'openai', 'openrouter', 'anthropic', 'hf', 'copilot'];
+const PROVIDER_OPTIONS = ['local', 'openai', 'openrouter', 'anthropic', 'hf', 'copilot', 'google'];
 
 interface ProviderSheetProps {
   visible: boolean;
@@ -32,6 +32,8 @@ interface ProviderSheetProps {
 export default function ProviderSheet({ visible, onClose, routing, onRefresh }: ProviderSheetProps) {
   const [localRouting, setLocalRouting] = useState<Record<string, ProviderRoute>>({});
   const [modelOverrides, setModelOverrides] = useState<Record<string, string>>({});
+  const [hfProvider, setHfProvider] = useState('deepinfra');
+  const [providerAvailability, setProviderAvailability] = useState<Record<string, boolean>>({});
   const [persist, setPersist] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -45,7 +47,29 @@ export default function ProviderSheet({ visible, onClose, routing, onRefresh }: 
       }
       setModelOverrides(overrides);
     }
+    if (routing?.hf_provider) {
+      setHfProvider(routing.hf_provider);
+    }
   }, [routing]);
+
+  // Load provider readiness (which providers have API keys) once on open.
+  useEffect(() => {
+    if (visible) {
+      kernelClient.getAllProviders()
+        .then((avail) => {
+          const map: Record<string, boolean> = {};
+          if (avail && typeof avail === 'object') {
+            for (const [k, v] of Object.entries(avail)) {
+              if (v && typeof v === 'object' && 'ready' in v) {
+                map[k] = Boolean((v as any).ready);
+              }
+            }
+          }
+          setProviderAvailability(map);
+        })
+        .catch(() => setProviderAvailability({}));
+    }
+  }, [visible]);
 
   const handleApply = async () => {
     setLoading(true);
@@ -61,6 +85,12 @@ export default function ProviderSheet({ visible, onClose, routing, onRefresh }: 
         persist
       );
       if (!ok) success = false;
+    }
+    // Persist the HF Router provider (only meaningful when hf is in use).
+    const hf = hfProvider.trim();
+    if (hf !== '') {
+      const okHf = await kernelClient.setHfProvider(hf, persist);
+      if (!okHf) success = false;
     }
     setLoading(false);
     if (success) {
@@ -130,6 +160,46 @@ export default function ProviderSheet({ visible, onClose, routing, onRefresh }: 
                 </View>
               </View>
             ))}
+
+            {(() => {
+              // Warn if any selected provider is not ready (no API key set).
+              const missing = CALL_TYPES
+                .map((ct) => localRouting[ct]?.provider)
+                .filter((p, i, arr) => p && p !== 'local' && arr.indexOf(p) === i)
+                .filter((p) => providerAvailability[p] === false);
+              if (missing.length === 0) return null;
+              return (
+                <View style={styles.warnRow}>
+                  <Text style={styles.warnText}>
+                    ⚠️ No API key set for: {missing.join(', ')} — inference may fall back or fail.
+                  </Text>
+                </View>
+              );
+            })()}
+
+            {(() => {
+              // Show HF Router provider input when the hf provider is in use.
+              const hfUsed = CALL_TYPES.some((ct) => localRouting[ct]?.provider === 'hf');
+              if (!hfUsed) return null;
+              return (
+                <View style={styles.hfRow}>
+                  <Text style={styles.rowLabel}>HF Router Provider</Text>
+                  <Text style={styles.hfHint}>
+                    Provider used by HuggingFace (e.g. deepinfra, together). Added as a
+                    &quot;:provider&quot; suffix on the model id.
+                  </Text>
+                  <TextInput
+                    style={styles.modelInput}
+                    value={hfProvider}
+                    onChangeText={setHfProvider}
+                    placeholder="deepinfra"
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+              );
+            })()}
 
             <View style={styles.controlsRow}>
               <View style={styles.persistRow}>
@@ -234,6 +304,24 @@ const styles = StyleSheet.create({
     borderColor: '#30363d',
     marginTop: 4,
   },
+  warnRow: {
+    marginBottom: spacing.md,
+    padding: spacing.sm,
+    borderWidth: 1,
+    borderColor: '#d29922',
+    borderRadius: borderRadius.md,
+    backgroundColor: 'rgba(210, 153, 34, 0.08)',
+  },
+  warnText: { fontSize: 11, color: '#d29922' },
+  hfRow: {
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: '#21262d',
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    backgroundColor: colors.bgSurface,
+  },
+  hfHint: { fontSize: 10, color: colors.textMuted, marginBottom: spacing.sm },
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',

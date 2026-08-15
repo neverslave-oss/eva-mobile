@@ -401,6 +401,22 @@ class KernelApiClient {
     } catch { return false; }
   }
 
+  /**
+   * Set the HF Router inference provider (providers.hf_provider) used by the
+   * `hf` provider, e.g. 'deepinfra', 'together'. Persisted when persist=true.
+   */
+  async setHfProvider(provider: string, persist?: boolean): Promise<boolean> {
+    try {
+      const body: Record<string, any> = { hf_provider: provider };
+      if (persist) body.persist = true;
+      await this.client.post(`${this.base}/provider/set`, body, {
+        timeout: 5000,
+        headers: this.authHeaders(),
+      });
+      return true;
+    } catch { return false; }
+  }
+
   async getAllProviders(): Promise<Record<string, any> | null> {
     try {
       const res = await this.client.get(`${this.base}/provider/available`, {
