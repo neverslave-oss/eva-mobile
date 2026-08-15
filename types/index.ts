@@ -92,6 +92,7 @@ export interface SystemStatus {
 export interface ProviderRouting {
   routing: Record<string, ProviderRoute>;
   collect_trajectories?: boolean;
+  hf_provider?: string;
 }
 
 export interface ProviderRoute {
@@ -180,6 +181,7 @@ export const PROVIDER_NAMES: Record<string, string> = {
   anthropic: '🧠 Anthropic',
   hf: '🤗 HuggingFace',
   copilot: '⚡ Copilot',
+  google: '🔎 Google',
 };
 
 // ── Defaults ───────────────────────────────────────────────────────

@@ -69,4 +69,17 @@ these changes and need alignment.
 - Not adding `ollama` (not a kernel-evolving provider).
 
 ## Status
-[ ] Not started
+[x] Completed
+
+## Notes
+- Exposed `hf_provider` in kernel-evolving `/provider` GET response (+ added
+  `google` to the providers list) and added `openrouter`/`google` to
+  `/provider/available` (plus improved the `copilot` readiness check to accept
+  `GITHUB_COPILOT_TOKEN` or `GITHUB_TOKEN`).
+- Mobile: added `hf_provider` to `ProviderRouting` type, `google` to
+  `PROVIDER_NAMES`, an HF Router Provider input + provider-readiness warning to
+  `ProviderSheet`, and `setHfProvider()` to `KernelApiClient`.
+- Also fixed a pre-existing build-blocking bug: `SettingsScreen.tsx` called
+  `pairDevice()` without destructuring it from `useSettingsStore()`.
+- Verified: `tsc --noEmit` clean; 67/67 Jest tests pass; live /provider +
+  /provider/available return the new fields.

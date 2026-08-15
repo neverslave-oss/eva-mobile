@@ -66,7 +66,7 @@ export default function SettingsScreen() {
   const {
     mode, serverUrl, proxyUrl, authToken, user,
     setMode, setServerUrl, setProxyUrl, setAuthToken, setUser,
-    login, logout,
+    login, logout, pairDevice,
   } = useSettingsStore();
   const { setOnboardingCompleted } = useAppStore();
   const [localUrl, setLocalUrl] = useState(serverUrl);
