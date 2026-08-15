@@ -32,6 +32,7 @@
 - `.specs/plans/feature-screens-navigation.md`
 - `.specs/plans/feature-ci-cd-pipeline.md`
 - `.specs/plans/feature-agent-chat-telegram-pair.md`
+- `.specs/plans/2026-08-15-align-provider-routing-hf-cloud.md`
 
 ## ADR
 
