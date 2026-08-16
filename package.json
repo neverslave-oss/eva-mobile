@@ -1,6 +1,7 @@
 {
   "name": "kernel-mobile-v2",
   "version": "1.0.0",
+  "license": "Hippocratic-2.1",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.8",
